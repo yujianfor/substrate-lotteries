@@ -303,7 +303,7 @@ use frame_support::{
 };
 use pallet_session::historical;
 use sp_runtime::{
-	Perbill, PerU16, PerThing, RuntimeDebug, DispatchError,
+	Perbill, PerU16, PerThing, InnerOf, RuntimeDebug, DispatchError,
 	curve::PiecewiseLinear,
 	traits::{
 		Convert, Zero, StaticLookup, CheckedSub, Saturating, SaturatedConversion, AtLeast32Bit,
@@ -895,7 +895,7 @@ pub trait Trait: frame_system::Trait + SendTransactionTypes<Call<Self>> {
 	type Call: Dispatchable + From<Call<Self>> + IsSubType<Module<Self>, Self> + Clone;
 
 	/// Maximum number of balancing iterations to run in the offchain submission. If set to 0,
-	/// balance_solution will not be executed at all.
+	/// balancing will not be executed at all.
 	type MaxIterations: Get<u32>;
 
 	/// The threshold of improvement that should be provided for a new solution to be accepted.
@@ -2821,7 +2821,7 @@ impl<T: Trait> Module<T> {
 	fn try_do_election() -> Option<ElectionResult<T::AccountId, BalanceOf<T>>> {
 		// an election result from either a stored submission or locally executed one.
 		let next_result = <QueuedElected<T>>::take().or_else(||
-			Self::do_phragmen_with_post_processing::<ChainAccuracy>(ElectionCompute::OnChain)
+			Self::do_on_chain_phragmen()
 		);
 
 		// either way, kill this. We remove it here to make sure it always has the exact same
@@ -2838,13 +2838,8 @@ impl<T: Trait> Module<T> {
 	/// `PrimitiveElectionResult` into `ElectionResult`.
 	///
 	/// No storage item is updated.
-	fn do_phragmen_with_post_processing<Accuracy: PerThing>(compute: ElectionCompute)
-		-> Option<ElectionResult<T::AccountId, BalanceOf<T>>>
-	where
-		Accuracy: sp_std::ops::Mul<ExtendedBalance, Output=ExtendedBalance>,
-		ExtendedBalance: From<<Accuracy as PerThing>::Inner>,
-	{
-		if let Some(phragmen_result) = Self::do_phragmen::<Accuracy>() {
+	fn do_on_chain_phragmen() -> Option<ElectionResult<T::AccountId, BalanceOf<T>>> {
+		if let Some(phragmen_result) = Self::do_phragmen::<ChainAccuracy>(0) {
 			let elected_stashes = phragmen_result.winners.iter()
 				.map(|(s, _)| s.clone())
 				.collect::<Vec<T::AccountId>>();
@@ -2870,7 +2865,7 @@ impl<T: Trait> Module<T> {
 			Some(ElectionResult::<T::AccountId, BalanceOf<T>> {
 				elected_stashes,
 				exposures,
-				compute,
+				compute: ElectionCompute::OnChain,
 			})
 		} else {
 			// There were not enough candidates for even our minimal level of functionality. This is
@@ -2887,7 +2882,11 @@ impl<T: Trait> Module<T> {
 	/// Self votes are added and nominations before the most recent slashing span are reaped.
 	///
 	/// No storage item is updated.
-	fn do_phragmen<Accuracy: PerThing>() -> Option<PrimitiveElectionResult<T::AccountId, Accuracy>> {
+	fn do_phragmen<Accuracy: PerThing>(
+		iterations: usize,
+	) -> Option<PrimitiveElectionResult<T::AccountId, Accuracy>>
+		where ExtendedBalance: From<InnerOf<Accuracy>>
+	{
 		let mut all_nominators: Vec<(T::AccountId, VoteWeight, Vec<T::AccountId>)> = Vec::new();
 		let mut all_validators = Vec::new();
 		for (validator, _) in <Validators<T>>::iter() {
@@ -2916,16 +2915,22 @@ impl<T: Trait> Module<T> {
 			(n, s, ns)
 		}));
 
-		seq_phragmen::<_, Accuracy>(
-			Self::validator_count() as usize,
-			Self::minimum_validator_count().max(1) as usize,
-			all_validators,
-			all_nominators,
-		)
+		if all_validators.len() < Self::minimum_validator_count().max(1) as usize {
+			None
+		} else {
+			Some(seq_phragmen::<_, Accuracy>(
+				Self::validator_count() as usize,
+				all_validators,
+				all_nominators,
+				Some((iterations, 0)),
+			))
+		}
 	}
 
 	/// Consume a set of [`Supports`] from [`sp_npos_elections`] and collect them into a [`Exposure`]
-	fn collect_exposure(supports: SupportMap<T::AccountId>) -> Vec<(T::AccountId, Exposure<T::AccountId, BalanceOf<T>>)> {
+	fn collect_exposure(
+		supports: SupportMap<T::AccountId>,
+	) -> Vec<(T::AccountId, Exposure<T::AccountId, BalanceOf<T>>)> {
 		let to_balance = |e: ExtendedBalance|
 			<T::CurrencyToVote as Convert<ExtendedBalance, BalanceOf<T>>>::convert(e);
 

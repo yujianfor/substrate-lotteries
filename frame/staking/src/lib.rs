@@ -2916,12 +2916,14 @@ impl<T: Trait> Module<T> {
 		if all_validators.len() < Self::minimum_validator_count().max(1) as usize {
 			None
 		} else {
-			Some(seq_phragmen::<_, Accuracy>(
+			seq_phragmen::<_, Accuracy>(
 				Self::validator_count() as usize,
 				all_validators,
 				all_nominators,
 				Some((iterations, 0)),
-			))
+			)
+			.map_err(|err| log!(error, "Call to seq-phragmen failed due to {}", err))
+			.ok()
 		}
 	}
 

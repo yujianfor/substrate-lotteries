@@ -38,21 +38,24 @@ fn main() {
 			let pre_sum = data.iter().fold(0u128, |acc, x| acc + *x as u128);
 
 			let normalized = data.normalize(norm);
-			// other condition of error is i
+			// error cases.
 			if pre_sum > sum_limit || data.len() > len_limit {
 				assert!(normalized.is_err())
 			} else {
-				let normalized = normalized.unwrap();
-				if data.len() > 0 {
-					// if sum goes beyond u128, panic.
-					let sum = normalized.iter().fold(0u128, |acc, x| acc + *x as u128);
-					assert_eq!(
-						sum,
-						norm as u128,
-						"sums don't match {:?}, {}",
-						normalized,
-						norm,
-					);
+				if let Ok(normalized) = normalized {
+					// if this function returns Ok(), then it will ALWAYS be accurate.
+					if data.len() > 0 {
+
+						// if sum goes beyond u128, panic.
+						let sum = normalized.iter().fold(0u128, |acc, x| acc + *x as u128);
+						assert_eq!(
+							sum,
+							norm as u128,
+							"sums don't match {:?}, {}",
+							normalized,
+							norm,
+						);
+					}
 				}
 			}
 		})

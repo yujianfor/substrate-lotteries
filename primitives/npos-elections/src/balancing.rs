@@ -15,12 +15,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! TODO:
+//! Balancing algorithm implementation.
+//!
+//! Given a committee `A` and an edge weight vector `w`, a balanced solution is one that
+//!
+//! 1.  it maximizes the sum of member supports, i.e `Argmax { sum(support(c)) }`. for all `c` in
+//! `A`.
+//! 2. it minimizes the sum of supports squared, i.e `Argmin { sum(support(c).pow(2)) }` for all `c`
+//! in `A`.
+//!
+//! See [`balance`] for more information.
 
-use crate::{IdentifierT, Voter, Edge, ExtendedBalance};
+use crate::{IdentifierT, Voter, ExtendedBalance};
 use sp_arithmetic::traits::Zero;
 use sp_std::prelude::*;
+use sp_std::{cell::RefCell, rc::Rc};
 
+/// Balance the weight distribution of a given `voters` at most `iterations` times, or up until the
+/// point where the biggest difference created per iteration of all stakes is `tolerance`. If this
+/// is called with `tolerance = 0`, then exactly `iterations` rounds will be executed, except if no
+/// change has been made (`difference = 0`).
+///
+/// In almost all cases, a balanced solution will have a better score than an unbalanced solution,
+/// yet this is not 100% guaranteed because the first element of a [`ElectionScore`] does not
+/// directly related to balancing.
+///
+/// Note that some reference implementation adopt an approach in which voters are balanced randomly
+/// per round. To advocate determinism, we don't do this. In each round, all voters are exactly
+/// balanced once, in the same order.
+///
+/// Also, note that due to re-distribution of weights, the outcome of this function might contain
+/// edges with weight zero. The call site should filter such weight if desirable.
+///
+/// ### References
+///
+/// - [A new approach to the maximum flow problem](https://dl.acm.org/doi/10.1145/48014.61051).
+/// - [Validator election in nominated proof-of-stake](https://arxiv.org/abs/2004.12990)
 pub fn balance<AccountId: IdentifierT>(
 	voters: &mut Vec<Voter<AccountId>>,
 	iterations: usize,
@@ -37,37 +67,51 @@ pub fn balance<AccountId: IdentifierT>(
 		}
 
 		iter += 1;
-		if max_diff < tolerance || iter >= iterations {
+		if max_diff <= tolerance || iter >= iterations {
 			break iter;
 		}
 	}
 }
 
-pub fn balance_voter<AccountId: IdentifierT>(
+/// Internal implementation of balancing for one voter.
+pub(crate) fn balance_voter<AccountId: IdentifierT>(
 	voter: &mut Voter<AccountId>,
 	tolerance: ExtendedBalance,
 ) -> ExtendedBalance {
-	// this will be a read-only snapshot. We will re-order them, but this will not matter. All
-	// updates will be applied to `voter`.
-	let mut elected_edges = voter.edges
-		.iter()
+	// create a shallow copy of the elected ones. The original one will not be used henceforth.
+	// TODO: perhaps we can avoid RC here.
+	let mut elected_edges_read_only = voter.edges
+		.iter_mut()
 		.filter(|e| e.candidate.borrow().elected)
-		.cloned()
-		.collect::<Vec<Edge<_>>>();
+		.map(|e| Rc::new(RefCell::new(e)))
+		.collect::<Vec<_>>();
 
 	// Either empty, or a self vote. Not much to do in either case.
-	if elected_edges.len() <= 1 {
+	if elected_edges_read_only.len() <= 1 {
 		return Zero::zero()
 	}
 
-	let stake_used = elected_edges.iter().fold(0, |a, e| a.saturating_add(e.weight));
-	let backed_stakes = elected_edges
+	// amount of stake from this voter that is used in edges.
+	let stake_used = elected_edges_read_only
 		.iter()
-		.map(|e| e.candidate.borrow().backed_stake)
+		.fold(0, |a: ExtendedBalance, e| a.saturating_add(e.borrow().weight));
+
+	// backed stake of each of the elected edges.
+	let backed_stakes = elected_edges_read_only
+		.iter()
+		.map(|e| e.borrow().candidate.borrow().backed_stake)
 		.collect::<Vec<_>>();
-	let backing_backed_stake = elected_edges
+
+	// backed stake of all the edges for whom we've spent some stake.
+	let backing_backed_stake = elected_edges_read_only
 		.iter()
-		.filter_map(|e| if e.weight > 0 { Some(e.candidate.borrow().backed_stake) } else { None })
+		.filter_map(|e|
+			if e.borrow().weight > 0 {
+				Some(e.borrow().candidate.borrow().backed_stake)
+			} else {
+				None
+			}
+		)
 		.collect::<Vec<_>>();
 
 	let difference = if backing_backed_stake.len() > 0 {
@@ -90,21 +134,25 @@ pub fn balance_voter<AccountId: IdentifierT>(
 	};
 
 	// remove all backings.
-	for edge in voter.edges.iter_mut() {
-		// TODO: make this one liner.
-		let mut candidate = edge.candidate.borrow_mut();
-		candidate.backed_stake = candidate.backed_stake.saturating_sub(edge.weight);
-		edge.weight = 0;
+	for edge in elected_edges_read_only.iter_mut() {
+		{
+			let edge = edge.borrow();
+			let mut candidate = edge.candidate.borrow_mut();
+			candidate.backed_stake = candidate.backed_stake.saturating_sub(edge.weight);
+		}
+		{
+			edge.borrow_mut().weight = 0;
+		}
 	}
 
-	elected_edges.sort_unstable_by_key(|e| e.candidate.borrow().backed_stake);
+	elected_edges_read_only.sort_unstable_by_key(|e| e.borrow().candidate.borrow().backed_stake);
 
 	let mut cumulative_backed_stake = Zero::zero();
-	let mut last_index = elected_edges.len() - 1;
+	let mut last_index = elected_edges_read_only.len() - 1;
 
-	for (index, edge) in voter.edges.iter_mut().enumerate() {
+	for (index, edge) in elected_edges_read_only.iter().enumerate() {
 		let index = index as ExtendedBalance;
-		let backed_stake = edge.candidate.borrow().backed_stake;
+		let backed_stake = edge.borrow().candidate.borrow().backed_stake;
 		let temp = backed_stake.saturating_mul(index);
 		if temp.saturating_sub(cumulative_backed_stake) > voter.budget {
 			// defensive only. length of elected_edges is checked to be above 1.
@@ -114,22 +162,39 @@ pub fn balance_voter<AccountId: IdentifierT>(
 		cumulative_backed_stake = cumulative_backed_stake.saturating_add(backed_stake);
 	}
 
-	let last_stake = elected_edges.get(last_index).expect(
+	let last_stake = elected_edges_read_only.get(last_index).expect(
 		"length of elected_edges is greater than or equal 2; last_index index is at \
 		the minimum elected_edges.len() - 1; index is within range; qed"
-	).candidate.borrow().backed_stake;
+	).borrow().candidate.borrow().backed_stake;
 	let ways_to_split = last_index + 1;
 	let excess = voter.budget
 		.saturating_add(cumulative_backed_stake)
 		.saturating_sub(last_stake.saturating_mul(ways_to_split as ExtendedBalance));
 
 	// Do the final update.
-	for edge in voter.edges.iter_mut().take(ways_to_split) {
-		let mut candidate = edge.candidate.borrow_mut();
-		edge.weight = (excess / ways_to_split as ExtendedBalance)
+	for edge in elected_edges_read_only.into_iter().take(ways_to_split) {
+		// first, do one scoped borrow to get the previous candidate stake.
+		let candidate_backed_stake = {
+			let edge_ref = edge.clone();
+			let edge = edge_ref.borrow();
+			let candidate = edge.candidate.borrow();
+			candidate.backed_stake
+		};
+
+		let new_edge_weight = (excess / ways_to_split as ExtendedBalance)
 			.saturating_add(last_stake)
-			.saturating_sub(candidate.backed_stake);
-		candidate.backed_stake = candidate.backed_stake.saturating_add(edge.weight);
+			.saturating_sub(candidate_backed_stake);
+
+		// write the new edge weight
+		{
+			edge.borrow_mut().weight = new_edge_weight;
+		}
+		// write the new candidate stake
+		{
+			let edge = edge.borrow();
+			let mut candidate = edge.candidate.borrow_mut();
+			candidate.backed_stake = candidate.backed_stake.saturating_add(new_edge_weight);
+		}
 	}
 
 	difference

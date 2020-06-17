@@ -682,6 +682,8 @@ decl_event!(
 		/// No (or not enough) candidates existed for this round. This is different from
 		/// `NewTerm([])`. See the description of `NewTerm`.
 		EmptyTerm,
+		/// Internal error happened while trying to perform election.
+		ElectionError,
 		/// A member has been removed. This should always be followed by either `NewTerm` ot
 		/// `EmptyTerm`.
 		MemberKicked(AccountId),
@@ -832,7 +834,8 @@ impl<T: Trait> Module<T> {
 		0
 	}
 
-	/// Run the phragmen election with all required side processes and state updates.
+	/// Run the phragmen election with all required side processes and state updates, if election
+	/// succeeds. Else, it will emit an `ElectionError` event.
 	///
 	/// Calls the appropriate [`ChangeMembers`] function variant internally.
 	///
@@ -870,121 +873,123 @@ impl<T: Trait> Module<T> {
 			.map(|(voter, (stake, targets))| { (voter, to_votes(stake), targets) })
 			.collect::<Vec<_>>();
 
-		let ElectionResult { winners, assignments: _ } = sp_npos_elections::seq_phragmen::<T::AccountId, Perbill>(
+		let _ = sp_npos_elections::seq_phragmen::<T::AccountId, Perbill>(
 			num_to_elect,
 			candidates,
 			voters_and_votes.clone(),
 			None,
-		);
+		).map(|ElectionResult { winners, assignments: _ }| {
+			let old_members_ids = <Members<T>>::take().into_iter()
+				.map(|(m, _)| m)
+				.collect::<Vec<T::AccountId>>();
+			let old_runners_up_ids = <RunnersUp<T>>::take().into_iter()
+				.map(|(r, _)| r)
+				.collect::<Vec<T::AccountId>>();
 
-		let old_members_ids = <Members<T>>::take().into_iter()
-			.map(|(m, _)| m)
-			.collect::<Vec<T::AccountId>>();
-		let old_runners_up_ids = <RunnersUp<T>>::take().into_iter()
-			.map(|(r, _)| r)
-			.collect::<Vec<T::AccountId>>();
+			// filter out those who end up with no backing stake.
+			let new_set_with_stake = winners
+				.into_iter()
+				.filter_map(|(m, b)| if b.is_zero() { None } else { Some((m, to_balance(b))) })
+				.collect::<Vec<(T::AccountId, BalanceOf<T>)>>();
 
-		// filter out those who end up with no backing stake.
-		let new_set_with_stake = winners
-			.into_iter()
-			.filter_map(|(m, b)| if b.is_zero() { None } else { Some((m, to_balance(b))) })
-			.collect::<Vec<(T::AccountId, BalanceOf<T>)>>();
+			// OPTIMISATION NOTE: we could bail out here if `new_set.len() == 0`. There isn't much
+			// left to do. Yet, re-arranging the code would require duplicating the slashing of
+			// exposed candidates, cleaning any previous members, and so on. For now, in favour of
+			// readability and veracity, we keep it simple.
 
-		// OPTIMISATION NOTE: we could bail out here if `new_set.len() == 0`. There isn't much
-		// left to do. Yet, re-arranging the code would require duplicating the slashing of
-		// exposed candidates, cleaning any previous members, and so on. For now, in favour of
-		// readability and veracity, we keep it simple.
+			// split new set into winners and runners up.
+			let split_point = desired_seats.min(new_set_with_stake.len());
+			let mut new_members = (&new_set_with_stake[..split_point]).to_vec();
 
-		// split new set into winners and runners up.
-		let split_point = desired_seats.min(new_set_with_stake.len());
-		let mut new_members = (&new_set_with_stake[..split_point]).to_vec();
+			// save the runners up as-is. They are sorted based on desirability.
+			// save the members, sorted based on account id.
+			new_members.sort_by(|i, j| i.0.cmp(&j.0));
 
-		// save the runners up as-is. They are sorted based on desirability.
-		// save the members, sorted based on account id.
-		new_members.sort_by(|i, j| i.0.cmp(&j.0));
-
-		let mut prime_votes: Vec<_> = new_members.iter().map(|c| (&c.0, VoteWeight::zero())).collect();
-		for (_, stake, targets) in voters_and_votes.into_iter() {
-			for (votes, who) in targets.iter()
-				.enumerate()
-				.map(|(votes, who)| ((MAXIMUM_VOTE - votes) as u32, who))
-			{
-				if let Ok(i) = prime_votes.binary_search_by_key(&who, |k| k.0) {
-					prime_votes[i].1 += stake * votes as VoteWeight;
+			let mut prime_votes: Vec<_> = new_members.iter().map(|c| (&c.0, VoteWeight::zero())).collect();
+			for (_, stake, targets) in voters_and_votes.into_iter() {
+				for (votes, who) in targets.iter()
+					.enumerate()
+					.map(|(votes, who)| ((MAXIMUM_VOTE - votes) as u32, who))
+				{
+					if let Ok(i) = prime_votes.binary_search_by_key(&who, |k| k.0) {
+						prime_votes[i].1 += stake * votes as VoteWeight;
+					}
 				}
 			}
-		}
-		let prime = prime_votes.into_iter().max_by_key(|x| x.1).map(|x| x.0.clone());
+			let prime = prime_votes.into_iter().max_by_key(|x| x.1).map(|x| x.0.clone());
 
-		// new_members_ids is sorted by account id.
-		let new_members_ids = new_members
-			.iter()
-			.map(|(m, _)| m.clone())
-			.collect::<Vec<T::AccountId>>();
+			// new_members_ids is sorted by account id.
+			let new_members_ids = new_members
+				.iter()
+				.map(|(m, _)| m.clone())
+				.collect::<Vec<T::AccountId>>();
 
-		let new_runners_up = &new_set_with_stake[split_point..]
-			.into_iter()
-			.cloned()
-			.rev()
-			.collect::<Vec<(T::AccountId, BalanceOf<T>)>>();
-		// new_runners_up remains sorted by desirability.
-		let new_runners_up_ids = new_runners_up
-			.iter()
-			.map(|(r, _)| r.clone())
-			.collect::<Vec<T::AccountId>>();
+			let new_runners_up = &new_set_with_stake[split_point..]
+				.into_iter()
+				.cloned()
+				.rev()
+				.collect::<Vec<(T::AccountId, BalanceOf<T>)>>();
+			// new_runners_up remains sorted by desirability.
+			let new_runners_up_ids = new_runners_up
+				.iter()
+				.map(|(r, _)| r.clone())
+				.collect::<Vec<T::AccountId>>();
 
-		// report member changes. We compute diff because we need the outgoing list.
-		let (incoming, outgoing) = T::ChangeMembers::compute_members_diff(
-			&new_members_ids,
-			&old_members_ids,
-		);
-		T::ChangeMembers::change_members_sorted(
-			&incoming,
-			&outgoing.clone(),
-			&new_members_ids,
-		);
-		T::ChangeMembers::set_prime(prime);
-
-		// outgoing candidates lose their bond.
-		let mut to_burn_bond = outgoing.to_vec();
-
-		// compute the outgoing of runners up as well and append them to the `to_burn_bond`
-		{
-			let (_, outgoing) = T::ChangeMembers::compute_members_diff(
-				&new_runners_up_ids,
-				&old_runners_up_ids,
+			// report member changes. We compute diff because we need the outgoing list.
+			let (incoming, outgoing) = T::ChangeMembers::compute_members_diff(
+				&new_members_ids,
+				&old_members_ids,
 			);
-			to_burn_bond.extend(outgoing);
-		}
+			T::ChangeMembers::change_members_sorted(
+				&incoming,
+				&outgoing.clone(),
+				&new_members_ids,
+			);
+			T::ChangeMembers::set_prime(prime);
 
-		// Burn loser bond. members list is sorted. O(NLogM) (N candidates, M members)
-		// runner up list is not sorted. O(K*N) given K runner ups. Overall: O(NLogM + N*K)
-		// both the member and runner counts are bounded.
-		exposed_candidates.into_iter().for_each(|c| {
-			// any candidate who is not a member and not a runner up.
-			if new_members.binary_search_by_key(&c, |(m, _)| m.clone()).is_err()
-				&& !new_runners_up_ids.contains(&c)
+			// outgoing candidates lose their bond.
+			let mut to_burn_bond = outgoing.to_vec();
+
+			// compute the outgoing of runners up as well and append them to the `to_burn_bond`
 			{
-				let (imbalance, _) = T::Currency::slash_reserved(&c, T::CandidacyBond::get());
-				T::LoserCandidate::on_unbalanced(imbalance);
+				let (_, outgoing) = T::ChangeMembers::compute_members_diff(
+					&new_runners_up_ids,
+					&old_runners_up_ids,
+				);
+				to_burn_bond.extend(outgoing);
 			}
+
+			// Burn loser bond. members list is sorted. O(NLogM) (N candidates, M members)
+			// runner up list is not sorted. O(K*N) given K runner ups. Overall: O(NLogM + N*K)
+			// both the member and runner counts are bounded.
+			exposed_candidates.into_iter().for_each(|c| {
+				// any candidate who is not a member and not a runner up.
+				if new_members.binary_search_by_key(&c, |(m, _)| m.clone()).is_err()
+					&& !new_runners_up_ids.contains(&c)
+				{
+					let (imbalance, _) = T::Currency::slash_reserved(&c, T::CandidacyBond::get());
+					T::LoserCandidate::on_unbalanced(imbalance);
+				}
+			});
+
+			// Burn outgoing bonds
+			to_burn_bond.into_iter().for_each(|x| {
+				let (imbalance, _) = T::Currency::slash_reserved(&x, T::CandidacyBond::get());
+				T::LoserCandidate::on_unbalanced(imbalance);
+			});
+
+			<Members<T>>::put(&new_members);
+			<RunnersUp<T>>::put(new_runners_up);
+
+			Self::deposit_event(RawEvent::NewTerm(new_members.clone().to_vec()));
+
+			// clean candidates.
+			<Candidates<T>>::kill();
+
+			ElectionRounds::mutate(|v| *v += 1);
+		}).map_err(|_| {
+			Self::deposit_event(RawEvent::ElectionError);
 		});
-
-		// Burn outgoing bonds
-		to_burn_bond.into_iter().for_each(|x| {
-			let (imbalance, _) = T::Currency::slash_reserved(&x, T::CandidacyBond::get());
-			T::LoserCandidate::on_unbalanced(imbalance);
-		});
-
-		<Members<T>>::put(&new_members);
-		<RunnersUp<T>>::put(new_runners_up);
-
-		Self::deposit_event(RawEvent::NewTerm(new_members.clone().to_vec()));
-
-		// clean candidates.
-		<Candidates<T>>::kill();
-
-		ElectionRounds::mutate(|v| *v += 1);
 	}
 }
 

@@ -16,13 +16,17 @@
 // limitations under the License.
 
 //! A set of election algorithms to be used with a substrate runtime, typically within the staking
-//! sub-system. Notable implementation include
+//! sub-system. Notable implementation include:
 //!
 //! - [`seq_phragmen`]: Implements the Phragmén Sequential Method. An un-ranked, relatively fast
 //!   election method that ensures PJR, but does not provide a constant factor approximation of the
 //!   maximin problem.
 //! - [`balance_solution`]: Implements the star balancing algorithm. This iterative process can
-//!   increase a solutions score, as described in [`evaluate_support`].
+//!   increase a solutions score.
+//!
+//! ### Terminology
+//!
+//! TODO
 //!
 //! More information can be found at: https://arxiv.org/abs/2004.12990
 
@@ -37,8 +41,8 @@ use sp_std::{
 	cell::RefCell,
 };
 use sp_arithmetic::{
-	PerThing, InnerOf, Rational128, ThresholdOrd, Normalizable,
-	traits::{Zero, Saturating, Bounded},
+	PerThing, InnerOf, UpperOf, Rational128, ThresholdOrd, Normalizable,
+	traits::{Zero, Saturating, Bounded, SaturatedConversion},
 };
 
 #[cfg(feature = "std")]
@@ -109,7 +113,6 @@ pub type ExtendedBalance = u128;
 pub type ElectionScore = [ExtendedBalance; 3];
 
 /// A winner, with their respective approval stake.
-/// TODO: deprecate this shit.
 pub type WithApprovalOf<A> = (A, ExtendedBalance);
 
 /// A mutable pointer to a candidate.
@@ -145,7 +148,7 @@ pub struct Voter<AccountId> {
 	load: Rational128,
 }
 
-impl<AccountId> Voter<AccountId> {
+impl<AccountId: IdentifierT> Voter<AccountId> {
 	/// Returns none if this voter does not have any non-zero distributions.
 	///
 	/// Note that this might create _un-normalized_ assignments, due to accuracy loss of `P`. Call
@@ -170,20 +173,22 @@ impl<AccountId> Voter<AccountId> {
 		}
 	}
 
-	/// TODO:
-	pub fn normalize(&mut self) {
+	/// Try and normalize the votes of self.
+	///
+	/// If the normalization is successful then `true` is returned.
+	pub fn try_normalize(&mut self) -> Result<(), &'static str> {
 		let edge_weights = self.edges.iter().map(|e| e.weight).collect::<Vec<_>>();
-		let normalized = edge_weights.normalize(self.budget)
-			.expect("length of assignments per voter is limited and will fit in u128; qed.");
-		// here we count on the fact that normalize does not change the order.
-		for (edge, corrected) in self.edges.iter_mut().zip(normalized.into_iter()) {
-			let mut candidate = edge.candidate.borrow_mut();
-			// first, subtract the incorrect weight
-			candidate.backed_stake = candidate.backed_stake.saturating_sub(edge.weight);
-			edge.weight = corrected;
-			// Then add the correct one again.
-			candidate.backed_stake = candidate.backed_stake.saturating_add(edge.weight);
-		}
+		edge_weights.normalize(self.budget).map(|normalized| {
+			// here we count on the fact that normalize does not change the order.
+			for (edge, corrected) in self.edges.iter_mut().zip(normalized.into_iter()) {
+				let mut candidate = edge.candidate.borrow_mut();
+				// first, subtract the incorrect weight
+				candidate.backed_stake = candidate.backed_stake.saturating_sub(edge.weight);
+				edge.weight = corrected;
+				// Then add the correct one again.
+				candidate.backed_stake = candidate.backed_stake.saturating_add(edge.weight);
+			}
+		})
 	}
 }
 
@@ -191,6 +196,7 @@ impl<AccountId> Voter<AccountId> {
 #[derive(Clone, Default, Debug)]
 pub struct Edge<AccountId> {
 	/// Identifier.
+	// TODO: this is redundant; remove it and use candidate.who.
 	who: AccountId,
 	/// Load of this vote.
 	load: Rational128,
@@ -203,28 +209,28 @@ pub struct Edge<AccountId> {
 
 /// Final result of the election.
 #[derive(Debug)]
-pub struct ElectionResult<AccountId, T: PerThing> {
+pub struct ElectionResult<AccountId, P: PerThing> {
 	/// Just winners zipped with their approval stake. Note that the approval stake is merely the
 	/// sub of their received stake and could be used for very basic sorting and approval voting.
 	pub winners: Vec<WithApprovalOf<AccountId>>,
 	/// Individual assignments. for each tuple, the first elements is a voter and the second
 	/// is the list of candidates that it supports.
-	pub assignments: Vec<Assignment<AccountId, T>>,
+	pub assignments: Vec<Assignment<AccountId, P>>,
 }
 
 /// A voter's stake assignment among a set of targets, represented as ratios.
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "std", derive(PartialEq, Eq, Encode, Decode))]
-pub struct Assignment<AccountId, T: PerThing> {
+pub struct Assignment<AccountId, P: PerThing> {
 	/// Voter's identifier.
 	pub who: AccountId,
 	/// The distribution of the voter's stake.
-	pub distribution: Vec<(AccountId, T)>,
+	pub distribution: Vec<(AccountId, P)>,
 }
 
-impl<AccountId: IdentifierT, T: PerThing> Assignment<AccountId, T>
+impl<AccountId: IdentifierT, P: PerThing> Assignment<AccountId, P>
 where
-	ExtendedBalance: From<InnerOf<T>>,
+	ExtendedBalance: From<InnerOf<P>>,
 {
 	/// Convert from a ratio assignment into one with absolute values aka. [`StakedAssignment`].
 	///
@@ -235,12 +241,11 @@ where
 	///
 	/// If an edge ratio is [`Bounded::min_value()`], it is dropped. This edge can never mean
 	/// anything useful.
-	/// TODO: unit test
-	pub fn into_staked(self, stake: ExtendedBalance, fill: bool) -> StakedAssignment<AccountId>
+	pub fn into_staked(self, stake: ExtendedBalance) -> StakedAssignment<AccountId>
 	where
-		T: sp_std::ops::Mul<ExtendedBalance, Output = ExtendedBalance>,
+		P: sp_std::ops::Mul<ExtendedBalance, Output = ExtendedBalance>,
 	{
-		let mut distribution = self.distribution
+		let distribution = self.distribution
 			.into_iter()
 			.filter_map(|(target, p)| {
 				// if this ratio is zero, then skip it.
@@ -255,44 +260,37 @@ where
 			})
 			.collect::<Vec<(AccountId, ExtendedBalance)>>();
 
-		if fill {
-			let normalized_weights = distribution
-				.iter()
-				.map(|(_, ref weight)| *weight)
-				.collect::<Vec<_>>()
-				.normalize(stake)
-				.expect("length of distribution is limited and will fit into T::Inner");
-			distribution
-				.iter_mut()
-				.zip(normalized_weights.into_iter())
-				.for_each(|((_, weight), corrected)| {
-					*weight = corrected;
-				})
-		}
-
 		StakedAssignment {
 			who: self.who,
 			distribution,
 		}
 	}
 
-	// TODO unit test
-	pub fn normalize(&mut self) {
+	/// Try and normalize this assignment.
+	///
+	/// If `Ok(())` is returned, then the assignment MUST have been successfully normalized to 100%.
+	pub fn try_normalize(&mut self) -> Result<(), &'static str> {
+		// NOTE: sadly we cannot use the impl for Vec<PerThing> here. Nonetheless, we use the same
+		// technique to prevent errors, do the calculation in the upper type.
 		let inners = self.distribution
 			.iter()
 			.map(|(_, p)| p)
 			.cloned()
-			.map(|p| p.deconstruct())
-			.collect::<Vec<_>>();
-		let corrected = inners
-			.normalize(T::one().deconstruct())
-			.expect("length of distribution is limited and will fit into T::Inner")
-			.into_iter()
-			.map(|i| T::from_parts(i))
-			.collect::<Vec<_>>();
-		for ((_, ratio), normalized) in self.distribution.iter_mut().zip(corrected.into_iter()) {
-			*ratio = normalized;
-		}
+			.map(|p| p.deconstruct().into())
+			.collect::<Vec<UpperOf<P>>>();
+
+		let center: UpperOf<P> = P::one().deconstruct().into();
+		inners.normalize(center)
+			.map(|corrected|
+				corrected.into_iter().map(|i|
+					P::from_parts(i.saturated_into())
+				).collect::<Vec<_>>()
+			)
+			.map(|corrected|
+				for ((_, ratio), normalized) in self.distribution.iter_mut().zip(corrected.into_iter()) {
+					*ratio = normalized;
+				}
+			)
 	}
 }
 
@@ -318,38 +316,50 @@ impl<AccountId> StakedAssignment<AccountId> {
 	/// potentially get used to create a compact type; a compact type requires sum of ratios to be
 	/// less than 100% upon un-compacting.
 	///
-	/// TODO: unit test
-	///
 	/// If an edge stake is so small that it cannot be represented in `T`, it is ignored. This edge
 	/// can never be re-created and does not mean anything useful anymore.
-	pub fn into_assignment<T: PerThing>(self, fill: bool) -> Assignment<AccountId, T>
+	pub fn into_assignment<P: PerThing>(self) -> Assignment<AccountId, P>
 	where
-		ExtendedBalance: From<<T as PerThing>::Inner>,
+		ExtendedBalance: From<InnerOf<P>>,
 		AccountId: IdentifierT,
 	{
 		let stake = self.total();
 		let distribution = self.distribution
 			.into_iter()
 			.filter_map(|(target, w)| {
-				let per_thing = T::from_rational_approximation(w, stake);
+				let per_thing = P::from_rational_approximation(w, stake);
 				if per_thing == Bounded::min_value() {
 					None
 				} else {
 					Some((target, per_thing))
 				}
 			})
-			.collect::<Vec<(AccountId, T)>>();
+			.collect::<Vec<(AccountId, P)>>();
 
-		let mut assignment = Assignment {
+		Assignment {
 			who: self.who,
 			distribution,
-		};
-
-		if fill {
-			assignment.normalize();
 		}
+	}
 
-		assignment
+	/// Try and normalize this assignment.
+	///
+	/// If `Ok(())` is returned, then the assignment MUST have been successfully normalized to
+	/// `stake`.
+	pub fn try_normalize(&mut self, stake: ExtendedBalance) -> Result<(), &'static str> {
+		self.distribution
+			.iter()
+			.map(|(_, ref weight)| *weight)
+			.collect::<Vec<_>>()
+			.normalize(stake)
+			.map(|normalized_weights|
+				self.distribution
+					.iter_mut()
+					.zip(normalized_weights.into_iter())
+					.for_each(|((_, weight), corrected)| {
+						*weight = corrected;
+					})
+			)
 	}
 
 	/// Get the total stake of this assignment (aka voter budget).

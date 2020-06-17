@@ -29,6 +29,9 @@ use sp_debug_derive::RuntimeDebug;
 /// Get the inner type of a `PerThing`.
 pub type InnerOf<P> = <P as PerThing>::Inner;
 
+/// Get the upper type of a `PerThing`.
+pub type UpperOf<P> = <P as PerThing>::Upper;
+
 /// Something that implements a fixed point ration with an arbitrary granularity `X`, as _parts per
 /// `X`_.
 pub trait PerThing:
@@ -39,7 +42,9 @@ pub trait PerThing:
 
 	/// A data type larger than `Self::Inner`, used to avoid overflow in some computations.
 	/// It must be able to compute `ACCURACY^2`.
-	type Upper: BaseArithmetic + Copy + From<Self::Inner> + TryInto<Self::Inner> + fmt::Debug;
+	type Upper:
+		BaseArithmetic + Copy + From<Self::Inner> + TryInto<Self::Inner> +
+		UniqueSaturatedInto<Self::Inner> + fmt::Debug;
 
 	/// The accuracy of this type.
 	const ACCURACY: Self::Inner;

@@ -41,7 +41,7 @@ mod fixed_point;
 mod rational128;
 
 pub use fixed_point::{FixedPointNumber, FixedPointOperand, FixedI64, FixedI128, FixedU128};
-pub use per_things::{PerThing, InnerOf, Percent, PerU16, Permill, Perbill, Perquintill};
+pub use per_things::{PerThing, InnerOf, UpperOf, Percent, PerU16, Permill, Perbill, Perquintill};
 pub use rational128::Rational128;
 
 use sp_std::{prelude::*, cmp::Ordering, fmt::Debug, convert::TryInto};
@@ -86,8 +86,8 @@ where
 	}
 }
 
-/// A collection-like that, consisted of values of type `T` that can normalize its individual values
-/// around a centric point.
+/// A collection-like that is consisted of values of type `T` and can normalize its individual
+/// values around a centric point.
 pub trait Normalizable<T> {
 	/// Normalize self around `t_max`.
 	fn normalize(&self, t_max: T) -> Result<Vec<T>, &'static str>;
@@ -108,27 +108,21 @@ impl<T: Clone + Copy + Ord + BaseArithmetic + Debug> Normalizable<T> for Vec<T> 
 ///    cost of sorting per round at the cost of a little bit of memory.
 /// 2. The granularity of increment/decrements is determined by the difference and the number of
 ///    elements in `input` and their sum difference with `t_max`. In short, the implementation is
-///    very likely to over-increment/decrement in case the `diff/input.len()` is rather small.
+///    very likely to over-increment/decrement in case the `diff / input.len()` is rather small.
+///
+/// This function can return an error is if `T` cannot be built from the size of `input`, or if
+/// `sum(input)` cannot fit inside `T`. Moreover, if any of the internal operations saturate, it
+/// will also return en `Err`.
 ///
 /// Based on the above, the best use case of the function will be only to correct small rounding
-/// errors.
-///
-/// The only case where this can return an error is if `T` cannot be built from the size of `input`,
-/// or if `sum(input)` cannot fit inside `T`
-///
-/// This function is a best effort and might become lossy in case saturation happens. A common
-/// example of this is
-// TODO: needs fuzzer. It is quite important to make sure this:
-//   1. Does not reduce anyone's balance from what they had before. Only increase some.
-//   2. Sum always holds.
-///     Turns out it is quite hard to fuzz this shit. The result will likely be flaky if per_round
-///     is too high.
+/// errors. If the difference of the elements is vert large, then the subtraction/addition of one
+/// element with `diff / input.len()` might easily saturate and results will be `Err`.
 pub fn normalize<T>(input: &[T], t_max: T) -> Result<Vec<T>, &'static str>
-where T: Clone + Copy + Ord + BaseArithmetic + Debug,
+	where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 {
 	let mut sum = T::zero();
 	for t in input.iter() {
-		sum = sum.checked_add(t).ok_or("sun of vector cannot fit in T")?;
+		sum = sum.checked_add(t).ok_or("sum of input cannot fit in `T`")?;
 	}
 	let count = input.len();
 
@@ -152,9 +146,9 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 	output_with_idx.sort_unstable_by_key(|x| x.1);
 
 	if needs_bump {
-		// must increase the stakes a bit. Bump from the min element. Index of minimum is now zero.
-		// if at any point the min goes greater or equal the `max_threshold`, we move to the next
-		// minimum.
+		// must increase the values a bit. Bump from the min element. Index of minimum is now zero
+		// because we did a sort. If at any point the min goes greater or equal the `max_threshold`,
+		// we move to the next minimum.
 		let mut min_index = 0;
 		// at this threshold we move to next index.
 		let threshold = output_with_idx
@@ -163,7 +157,9 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 
 		if !per_round.is_zero() {
 			for _ in 0..count {
-				output_with_idx[min_index].1 = output_with_idx[min_index].1.saturating_add(per_round);
+				output_with_idx[min_index].1 = output_with_idx[min_index].1
+					.checked_add(&per_round)
+					.ok_or("Failed to add.")?;
 				if output_with_idx[min_index].1 >= threshold {
 					min_index += 1;
 					min_index = min_index % count;
@@ -173,7 +169,9 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 
 		// continue with the previous min_index
 		while !leftover.is_zero() {
-			output_with_idx[min_index].1 = output_with_idx[min_index].1.saturating_add(One::one());
+			output_with_idx[min_index].1 = output_with_idx[min_index].1
+				.checked_add(&One::one())
+				.ok_or("Failed to add.")?;
 			if output_with_idx[min_index].1 >= threshold {
 				min_index += 1;
 				min_index = min_index % count;
@@ -192,7 +190,9 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 
 		if !per_round.is_zero() {
 			for _ in 0..count {
-				output_with_idx[max_index].1 = output_with_idx[max_index].1.saturating_sub(per_round);
+				output_with_idx[max_index].1 = output_with_idx[max_index].1
+					.checked_sub(&per_round)
+					.ok_or("Failed to subtract.")?;
 				if output_with_idx[max_index].1 <= threshold {
 					max_index = max_index.checked_sub(1).unwrap_or(count - 1);
 				}
@@ -201,7 +201,9 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 
 		// continue with the previous max_index
 		while !leftover.is_zero() {
-			output_with_idx[max_index].1 = output_with_idx[max_index].1.saturating_sub(One::one());
+			output_with_idx[max_index].1 = output_with_idx[max_index].1
+				.checked_sub(&One::one())
+				.ok_or("Failed to subtract.")?;
 			if output_with_idx[max_index].1 <= threshold {
 				max_index = max_index.checked_sub(1).unwrap_or(count - 1);
 			}
@@ -210,7 +212,7 @@ where T: Clone + Copy + Ord + BaseArithmetic + Debug,
 	}
 
 	debug_assert_eq!(
-		output_with_idx.iter().fold(T::zero(), |acc, (_, x)| acc.saturating_add(*x)),
+		output_with_idx.iter().fold(T::zero(), |acc, (_, x)| acc + *x),
 		t_max,
 		"sum({:?}) != {:?}",
 		output_with_idx,
@@ -242,11 +244,6 @@ mod normalize_tests {
 		test_for!(u32);
 		test_for!(u16);
 		test_for!(u8);
-	}
-
-	#[test]
-	fn normalize_does_not_change_order() {
-
 	}
 
 	#[test]

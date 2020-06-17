@@ -84,7 +84,7 @@ fn generate_random_phragmen_result(
 			candidates.clone(),
 			voters.clone(),
 			None,
-		),
+		).unwrap(),
 		candidates,
 		voters,
 		stake_of_tree,
@@ -145,7 +145,7 @@ fn main() {
 				candidates,
 				voters,
 				Some((iterations, 0)),
-			);
+			).unwrap();
 
 			let balanced_score = {
 				let staked = assignment_ratio_to_staked(balanced.assignments.clone(), &stake_of);

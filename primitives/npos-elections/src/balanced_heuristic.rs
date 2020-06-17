@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! TODO
+// TODO
 
 #![allow(unused)]
 
@@ -23,24 +23,23 @@ use crate::{
 	IdentifierT, ElectionResult, ExtendedBalance, setup_inputs, VoteWeight, Candidate, Assignment,
 	Voter, CandidatePtr,
 };
-use sp_arithmetic::PerThing;
+use sp_arithmetic::{PerThing, InnerOf};
 use sp_std::{prelude::*, collections::btree_map::BTreeMap};
 
-/// TODO: rename all X: PerThing to P: PerThing
-pub fn balanced_heuristic<AccountId: IdentifierT, R: PerThing>(
+pub fn balanced_heuristic<AccountId: IdentifierT, P: PerThing>(
 	to_elect: usize,
 	initial_candidates: Vec<AccountId>,
 	initial_voters: Vec<(AccountId, VoteWeight, Vec<AccountId>)>,
-) -> Option<ElectionResult<AccountId, R>>
+) -> Option<ElectionResult<AccountId, P>>
 	where
-		R: sp_std::ops::Mul<ExtendedBalance, Output = ExtendedBalance>,
-		ExtendedBalance: From<<R as PerThing>::Inner>
+		P: sp_std::ops::Mul<ExtendedBalance, Output = ExtendedBalance>,
+		ExtendedBalance: From<InnerOf<P>>
 {
 	unimplemented!()
 }
 
 /// TODO:
-pub(crate) fn calculate_max_score<AccountId: IdentifierT, R: PerThing>(
+pub(crate) fn calculate_max_score<AccountId: IdentifierT, P: PerThing>(
 	candidates: &Vec<CandidatePtr<AccountId>>,
 	voters: &Vec<Voter<AccountId>>,
 ) -> (Candidate<AccountId>, VoteWeight) {
@@ -48,10 +47,10 @@ pub(crate) fn calculate_max_score<AccountId: IdentifierT, R: PerThing>(
 }
 
 /// TODO:
-pub(crate) fn apply_elected<AccountId: IdentifierT, R: PerThing>(
+pub(crate) fn apply_elected<AccountId: IdentifierT, P: PerThing>(
 	elected: &Candidate<AccountId>,
 	score: VoteWeight,
-	assignments: &mut Vec<Assignment<AccountId, R>>,
+	assignments: &mut Vec<Assignment<AccountId, P>>,
 ) {
 	unimplemented!()
 }

@@ -58,16 +58,18 @@ pub fn seq_phragmen<AccountId: IdentifierT, P: PerThing>(
 	initial_candidates: Vec<AccountId>,
 	initial_voters: Vec<(AccountId, VoteWeight, Vec<AccountId>)>,
 	balance: Option<(usize, ExtendedBalance)>,
-) -> ElectionResult<AccountId, P> where ExtendedBalance: From<InnerOf<P>> {
+) -> Result<ElectionResult<AccountId, P>, &'static str> where ExtendedBalance: From<InnerOf<P>> {
 	let (candidates, voters) = setup_inputs(initial_candidates, initial_voters);
 
 	let (candidates, mut voters) = seq_phragmen_core::<AccountId>(
 		rounds,
 		candidates,
 		voters,
-	);
+	)?;
 
 	if let Some((iterations, tolerance)) = balance {
+		// NOTE: might create zer-edges, but we will strip them again when we convert voter into
+		// assignment.
 		let _iters = balancing::balance::<AccountId>(&mut voters, iterations, tolerance);
 	}
 
@@ -81,12 +83,12 @@ pub fn seq_phragmen<AccountId: IdentifierT, P: PerThing>(
 	winners.sort_unstable_by_key(|c_ptr| c_ptr.borrow().round);
 
 	let mut assignments = voters.into_iter().filter_map(|v| v.into_assignment()).collect::<Vec<_>>();
-	assignments.iter_mut().for_each(|a| a.normalize());
+	let _ = assignments.iter_mut().map(|a| a.try_normalize()).collect::<Result<(), _>>()?;
 	let winners = winners.into_iter().map(|w_ptr|
 		(w_ptr.borrow().who.clone(), w_ptr.borrow().backed_stake)
 	).collect();
 
-	ElectionResult { winners, assignments }
+	Ok(ElectionResult { winners, assignments })
 }
 
 /// Core implementation of seq-phragmen.
@@ -100,7 +102,7 @@ pub fn seq_phragmen_core<AccountId: IdentifierT>(
 	rounds: usize,
 	candidates: Vec<CandidatePtr<AccountId>>,
 	mut voters: Vec<Voter<AccountId>>,
-) -> (Vec<CandidatePtr<AccountId>>, Vec<Voter<AccountId>>) {
+) -> Result<(Vec<CandidatePtr<AccountId>>, Vec<Voter<AccountId>>), &'static str> {
 	// we have already checked that we have more candidates than minimum_candidate_count.
 	let to_elect = rounds.min(candidates.len());
 
@@ -182,8 +184,8 @@ pub fn seq_phragmen_core<AccountId: IdentifierT>(
 		// remove all zero edges. These can become phantom edges during normalization.
 		voter.edges.retain(|e| e.weight > 0);
 		// inc budget to sum the budget
-		voter.normalize();
+		voter.try_normalize()?;
 	}
 
-	(candidates, voters)
+	Ok((candidates, voters))
 }

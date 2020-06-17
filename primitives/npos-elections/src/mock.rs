@@ -328,7 +328,7 @@ pub(crate) fn run_and_compare<Output: PerThing>(
 		candidates.clone(),
 		voters.iter().map(|(ref v, ref vs)| (v.clone(), stake_of(v), vs.clone())).collect::<Vec<_>>(),
 		None
-	);
+	).unwrap();
 
 	// run float poc code.
 	let truth_value = elect_float(

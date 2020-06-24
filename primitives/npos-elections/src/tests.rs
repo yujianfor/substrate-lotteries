@@ -17,8 +17,6 @@
 
 //! Tests for npos-elections.
 
-#![cfg(test)]
-
 use crate::mock::*;
 use crate::{
 	seq_phragmen, balancing, build_support_map, is_score_better, helpers::*,
@@ -146,10 +144,11 @@ fn balancing_core_works() {
 			))
 			.collect::<Vec<_>>(),
 		vec![
-			// note the 0 edge. This is know and not an issue per se.
-			(10, 10, vec![(1, 10), (2, 0)]),
-			(20, 20, vec![(1, 9), (3, 11)]),
-			(30, 30, vec![(1, 7), (2, 6), (3, 8), (4, 7)]),
+			// note the 0 edge. This is know and not an issue per se. Also note that the stakes are
+			// not normalized.
+			(10, 10, vec![(1, 9), (2, 0)]),
+			(20, 20, vec![(1, 8), (3, 11)]),
+			(30, 30, vec![(1, 9), (2, 6), (3, 8), (4, 7)]),
 			(40, 40, vec![(1, 11), (3, 18), (4, 11)]),
 			(50, 50, vec![(2, 31), (4, 19)]),
 		]
@@ -970,10 +969,12 @@ mod score {
 
 mod compact {
 	use codec::{Decode, Encode};
-	use crate::{generate_compact_solution_type, VoteWeight};
-	use super::{AccountId};
+	use super::AccountId;
 	// these need to come from the same dev-dependency `sp-npos-elections`, not from the crate.
-	use sp_npos_elections::{Assignment, StakedAssignment, Error as PhragmenError, ExtendedBalance};
+	use crate::{
+		generate_compact_solution_type, VoteWeight, Assignment, StakedAssignment,
+		Error as PhragmenError, ExtendedBalance,
+	};
 	use sp_std::{convert::{TryInto, TryFrom}, fmt::Debug};
 	use sp_arithmetic::Percent;
 

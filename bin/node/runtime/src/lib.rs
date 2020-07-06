@@ -1080,6 +1080,10 @@ impl_runtime_apis! {
 		fn query_info(uxt: UncheckedExtrinsic, len: u32) -> RuntimeDispatchInfo<Balance> {
 			TransactionPayment::query_info(uxt, len)
 		}
+
+		fn calculate_fee(weight: Weight, len: u32) -> Balance {
+			TransactionPayment::compute_fee_raw(len, weight, 0, frame_support::weights::Pays::Yes)
+		}
 	}
 
 	impl sp_session::SessionKeys<Block> for Runtime {

@@ -312,7 +312,7 @@ impl<T: Trait> Module<T> where
 		Self::compute_fee_raw(len, post_info.calc_actual_weight(info), tip, info.pays_fee)
 	}
 
-	fn compute_fee_raw(
+	pub fn compute_fee_raw(
 		len: u32,
 		weight: Weight,
 		tip: BalanceOf<T>,

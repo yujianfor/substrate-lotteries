@@ -151,7 +151,7 @@
 //!
 //! ```
 //! use frame_support::{decl_module, dispatch};
-//! use frame_system::{self as system, ensure_signed};
+//! use frame_system::ensure_signed;
 //! use pallet_staking::{self as staking};
 //!
 //! pub trait Trait: staking::Trait {}
@@ -306,8 +306,8 @@ use sp_runtime::{
 	Percent, Perbill, PerU16, PerThing, InnerOf, RuntimeDebug, DispatchError,
 	curve::PiecewiseLinear,
 	traits::{
-		Convert, Zero, StaticLookup, CheckedSub, Saturating, SaturatedConversion, AtLeast32Bit,
-		Dispatchable,
+		Convert, Zero, StaticLookup, CheckedSub, Saturating, SaturatedConversion,
+		AtLeast32BitUnsigned, Dispatchable,
 	},
 	transaction_validity::{
 		TransactionValidityError, TransactionValidity, ValidTransaction, InvalidTransaction,
@@ -493,7 +493,7 @@ pub struct StakingLedger<AccountId, Balance: HasCompact> {
 
 impl<
 	AccountId,
-	Balance: HasCompact + Copy + Saturating + AtLeast32Bit,
+	Balance: HasCompact + Copy + Saturating + AtLeast32BitUnsigned,
 > StakingLedger<AccountId, Balance> {
 	/// Remove entries from `unlocking` that are sufficiently old and reduce the
 	/// total by the sum of their balances.
@@ -544,7 +544,7 @@ impl<
 }
 
 impl<AccountId, Balance> StakingLedger<AccountId, Balance> where
-	Balance: AtLeast32Bit + Saturating + Copy,
+	Balance: AtLeast32BitUnsigned + Saturating + Copy,
 {
 	/// Slash the validator for a given amount of balance. This can grow the value
 	/// of the slash in the case that the validator has less than `minimum_balance`
@@ -829,6 +829,68 @@ pub mod weight {
 	}
 }
 
+pub trait WeightInfo {
+	fn bond(u: u32, ) -> Weight;
+	fn bond_extra(u: u32, ) -> Weight;
+	fn unbond(u: u32, ) -> Weight;
+	fn withdraw_unbonded_update(s: u32, ) -> Weight;
+	fn withdraw_unbonded_kill(s: u32, ) -> Weight;
+	fn validate(u: u32, ) -> Weight;
+	fn nominate(n: u32, ) -> Weight;
+	fn chill(u: u32, ) -> Weight;
+	fn set_payee(u: u32, ) -> Weight;
+	fn set_controller(u: u32, ) -> Weight;
+	fn set_validator_count(c: u32, ) -> Weight;
+	fn force_no_eras(i: u32, ) -> Weight;
+	fn force_new_era(i: u32, ) -> Weight;
+	fn force_new_era_always(i: u32, ) -> Weight;
+	fn set_invulnerables(v: u32, ) -> Weight;
+	fn force_unstake(s: u32, ) -> Weight;
+	fn cancel_deferred_slash(s: u32, ) -> Weight;
+	fn payout_stakers(n: u32, ) -> Weight;
+	fn payout_stakers_alive_controller(n: u32, ) -> Weight;
+	fn rebond(l: u32, ) -> Weight;
+	fn set_history_depth(e: u32, ) -> Weight;
+	fn reap_stash(s: u32, ) -> Weight;
+	fn new_era(v: u32, n: u32, ) -> Weight;
+	fn do_slash(l: u32, ) -> Weight;
+	fn payout_all(v: u32, n: u32, ) -> Weight;
+	fn submit_solution_initial(v: u32, n: u32, a: u32, w: u32, ) -> Weight;
+	fn submit_solution_better(v: u32, n: u32, a: u32, w: u32, ) -> Weight;
+	fn submit_solution_weaker(v: u32, n: u32, ) -> Weight;
+}
+
+impl WeightInfo for () {
+	fn bond(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn bond_extra(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn unbond(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn withdraw_unbonded_update(_s: u32, ) -> Weight { 1_000_000_000 }
+	fn withdraw_unbonded_kill(_s: u32, ) -> Weight { 1_000_000_000 }
+	fn validate(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn nominate(_n: u32, ) -> Weight { 1_000_000_000 }
+	fn chill(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn set_payee(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn set_controller(_u: u32, ) -> Weight { 1_000_000_000 }
+	fn set_validator_count(_c: u32, ) -> Weight { 1_000_000_000 }
+	fn force_no_eras(_i: u32, ) -> Weight { 1_000_000_000 }
+	fn force_new_era(_i: u32, ) -> Weight { 1_000_000_000 }
+	fn force_new_era_always(_i: u32, ) -> Weight { 1_000_000_000 }
+	fn set_invulnerables(_v: u32, ) -> Weight { 1_000_000_000 }
+	fn force_unstake(_s: u32, ) -> Weight { 1_000_000_000 }
+	fn cancel_deferred_slash(_s: u32, ) -> Weight { 1_000_000_000 }
+	fn payout_stakers(_n: u32, ) -> Weight { 1_000_000_000 }
+	fn payout_stakers_alive_controller(_n: u32, ) -> Weight { 1_000_000_000 }
+	fn rebond(_l: u32, ) -> Weight { 1_000_000_000 }
+	fn set_history_depth(_e: u32, ) -> Weight { 1_000_000_000 }
+	fn reap_stash(_s: u32, ) -> Weight { 1_000_000_000 }
+	fn new_era(_v: u32, _n: u32, ) -> Weight { 1_000_000_000 }
+	fn do_slash(_l: u32, ) -> Weight { 1_000_000_000 }
+	fn payout_all(_v: u32, _n: u32, ) -> Weight { 1_000_000_000 }
+	fn submit_solution_initial(_v: u32, _n: u32, _a: u32, _w: u32, ) -> Weight { 1_000_000_000 }
+	fn submit_solution_better(_v: u32, _n: u32, _a: u32, _w: u32, ) -> Weight { 1_000_000_000 }
+	fn submit_solution_weaker(_v: u32, _n: u32, ) -> Weight { 1_000_000_000 }
+}
+
 pub trait Trait: frame_system::Trait + SendTransactionTypes<Call<Self>> {
 	/// The staking balance.
 	type Currency: LockableCurrency<Self::AccountId, Moment=Self::BlockNumber>;
@@ -894,7 +956,7 @@ pub trait Trait: frame_system::Trait + SendTransactionTypes<Call<Self>> {
 	type ElectionLookahead: Get<Self::BlockNumber>;
 
 	/// The overarching call type.
-	type Call: Dispatchable + From<Call<Self>> + IsSubType<Module<Self>, Self> + Clone;
+	type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
 
 	/// Maximum number of balancing iterations to run in the offchain submission.
 	///
@@ -915,6 +977,9 @@ pub trait Trait: frame_system::Trait + SendTransactionTypes<Call<Self>> {
 	/// This is exposed so that it can be tuned for particular runtime, when
 	/// multiple pallets send unsigned transactions.
 	type UnsignedPriority: Get<TransactionPriority>;
+
+	/// Weight information for extrinsics in this pallet.
+	type WeightInfo: WeightInfo;
 }
 
 /// Mode of era-forcing.
@@ -1928,7 +1993,7 @@ decl_module! {
 
 		/// Cancel enactment of a deferred slash.
 		///
-		/// Can be called by either the root origin or the `T::SlashCancelOrigin`.
+		/// Can be called by the `T::SlashCancelOrigin`.
 		///
 		/// Parameters: era and indices of the slashes for that era to kill.
 		///
@@ -1978,7 +2043,9 @@ decl_module! {
 		/// - Contains a limited number of reads and writes.
 		/// -----------
 		/// N is the Number of payouts for the validator (including the validator)
-		/// Base Weight: 110 + 54.2 * N µs (Median Slopes)
+		/// Base Weight:
+		/// - Reward Destination Staked: 110 + 54.2 * N µs (Median Slopes)
+		/// - Reward Destination Controller (Creating): 120 + 41.95 * N µs (Median Slopes)
 		/// DB Weight:
 		/// - Read: EraElectionStatus, CurrentEra, HistoryDepth, ErasValidatorReward,
 		///         ErasStakersClipped, ErasRewardPoints, ErasValidatorPrefs (8 items)
@@ -1986,7 +2053,7 @@ decl_module! {
 		/// - Write Each: System Account, Locks, Ledger (3 items)
 		/// # </weight>
 		#[weight =
-			110 * WEIGHT_PER_MICROS
+			120 * WEIGHT_PER_MICROS
 			+ 54 * WEIGHT_PER_MICROS * Weight::from(T::MaxNominatorRewardedPerValidator::get())
 			+ T::DbWeight::get().reads(7)
 			+ T::DbWeight::get().reads(5)  * Weight::from(T::MaxNominatorRewardedPerValidator::get() + 1)
@@ -2194,18 +2261,20 @@ decl_module! {
 			size: ElectionSize,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
-			Self::check_and_replace_solution(
+			let adjustments = Self::check_and_replace_solution(
 				winners,
 				compact,
 				ElectionCompute::Unsigned,
 				score,
 				era,
 				size,
-			)
-			// TODO: instead of returning an error, panic. This makes the entire produced block
-			// invalid.
-			// This ensures that block authors will not ever try and submit a solution which is not
-			// an improvement, since they will lose their authoring points/rewards.
+			).expect(
+				"An unsigned solution can only be submitted by validators; A validator should \
+				always produce correct solutions, else this block should not be imported, thus \
+				effectively depriving the validators from their authoring reward. Hence, this panic
+				is expected."
+			);
+			Ok(adjustments)
 		}
 	}
 }
@@ -2393,7 +2462,7 @@ impl<T: Trait> Module<T> {
 		match dest {
 			RewardDestination::Controller => Self::bonded(stash)
 				.and_then(|controller|
-					T::Currency::deposit_into_existing(&controller, amount).ok()
+					Some(T::Currency::deposit_creating(&controller, amount))
 				),
 			RewardDestination::Stash =>
 				T::Currency::deposit_into_existing(stash, amount).ok(),
@@ -3357,6 +3426,10 @@ impl<T, Reporter, Offender, R, O> ReportOffence<Reporter, Offender, O>
 			);
 			Ok(())
 		}
+	}
+
+	fn is_known_offence(offenders: &[Offender], time_slot: &O::TimeSlot) -> bool {
+		R::is_known_offence(offenders, time_slot)
 	}
 }
 

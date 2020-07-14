@@ -964,7 +964,6 @@ mod score {
 			false,
 		);
 	}
-
 }
 
 mod compact {

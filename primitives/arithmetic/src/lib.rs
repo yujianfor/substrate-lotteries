@@ -153,7 +153,6 @@ impl<P: PerThing> Normalizable<P> for Vec<P> {
 pub fn normalize<T>(input: &[T], targeted_sum: T) -> Result<Vec<T>, &'static str>
 	where T: Clone + Copy + Ord + BaseArithmetic + Unsigned + Debug,
 {
-	println!("Normalizring {:?} to {:?}", input, targeted_sum);
 	// compute sum and return error if failed.
 	let mut sum = T::zero();
 	for t in input.iter() {

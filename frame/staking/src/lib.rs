@@ -281,11 +281,7 @@ pub mod offchain_election;
 pub mod inflation;
 
 use sp_std::{
-	result,
-	prelude::*,
-	collections::btree_map::BTreeMap,
-	convert::{TryInto, From},
-	mem::size_of,
+	result, prelude::*, collections::btree_map::BTreeMap, convert::{TryInto, From}, mem::size_of,
 };
 use codec::{HasCompact, Encode, Decode};
 use frame_support::{
@@ -2275,6 +2271,24 @@ decl_module! {
 				is expected."
 			);
 			Ok(adjustments)
+		}
+
+		fn integrity_test() {
+			use sp_runtime::UpperOf;
+			// see the documentation of `Assignment::try_normalize`. Now we can ensure that this
+			// will always return `Ok`.
+			assert!(
+				<usize as TryInto<UpperOf<ChainAccuracy>>>::try_into(MAX_NOMINATIONS)
+				.unwrap()
+				.checked_mul(<ChainAccuracy>::one().deconstruct().try_into().unwrap())
+				.is_some()
+			);
+			assert!(
+				<usize as TryInto<UpperOf<OffchainAccuracy>>>::try_into(MAX_NOMINATIONS)
+				.unwrap()
+				.checked_mul(<OffchainAccuracy>::one().deconstruct().try_into().unwrap())
+				.is_some()
+			);
 		}
 	}
 }

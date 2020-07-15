@@ -17,6 +17,8 @@
 
 //! Helper methods for npos-elections.
 
+// TODO: these all could be made into extension traits.
+
 use crate::{
 	Assignment, ExtendedBalance, VoteWeight, IdentifierT, StakedAssignment, WithApprovalOf, Error,
 };

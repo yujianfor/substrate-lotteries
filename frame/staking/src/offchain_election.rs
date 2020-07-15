@@ -133,7 +133,9 @@ pub(crate) fn compute_offchain_election<T: Trait>() -> Result<(), OffchainElecti
 		.map_err(|_| OffchainElectionError::PoolSubmissionFailed)
 }
 
-/// TODO:
+/// Get a random number of iterations to run the balancing.
+///
+/// Uses the offchain seed to generate a random number.
 pub fn get_balancing_iters<T: Trait>() -> usize {
 	match T::MaxIterations::get() {
 		0 => 0,

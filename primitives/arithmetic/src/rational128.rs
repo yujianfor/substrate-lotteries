@@ -30,6 +30,11 @@ impl Rational128 {
 		Self(0, 1)
 	}
 
+	/// One
+	pub fn one() -> Self {
+		Self(1, 1)
+	}
+
 	/// If it is zero or not
 	pub fn is_zero(&self) -> bool {
 		self.0.is_zero()
@@ -119,6 +124,12 @@ impl Rational128 {
 		let n = self_scaled.0.checked_sub(other_scaled.0)
 			.ok_or("overflow while subtracting numerators")?;
 		Ok(Self(n, self_scaled.1))
+	}
+}
+
+impl<T: Into<u128>> From<T> for Rational128 {
+	fn from(t: T) -> Self {
+		Self::from(t.into(), 1)
 	}
 }
 

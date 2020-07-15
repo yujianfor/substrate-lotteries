@@ -33,12 +33,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use sp_std::{
-	prelude::*,
-	collections::btree_map::BTreeMap,
-	fmt::Debug,
-	cmp::Ordering,
-	rc::Rc,
-	cell::RefCell,
+	prelude::*, collections::btree_map::BTreeMap, fmt::Debug, cmp::Ordering, rc::Rc, cell::RefCell,
 };
 use sp_arithmetic::{
 	PerThing, Rational128, ThresholdOrd, InnerOf, Normalizable,
@@ -67,7 +62,6 @@ pub use helpers::*;
 pub use sequential_phragmen::*;
 pub use balancing::*;
 pub use balanced_heuristic::*;
-
 
 // re-export the compact macro, with the dependencies of the macro.
 #[doc(hidden)]
@@ -117,7 +111,7 @@ pub type ElectionScore = [ExtendedBalance; 3];
 /// A winner, with their respective approval stake.
 pub type WithApprovalOf<A> = (A, ExtendedBalance);
 
-/// A mutable pointer to a candidate.
+/// A pointer to a candidate struct with interior mutability.
 pub type CandidatePtr<A> = Rc<RefCell<Candidate<A>>>;
 
 /// A candidate entity for the election.
@@ -125,16 +119,35 @@ pub type CandidatePtr<A> = Rc<RefCell<Candidate<A>>>;
 pub struct Candidate<AccountId> {
 	/// Identifier.
 	who: AccountId,
-	/// Intermediary value used to sort candidates.
+	/// Score of the candidate.
+	///
+	/// Used differently in seq-phragmen and max-score.
 	score: Rational128,
-	/// Sum of the stake of this candidate based on received votes.
+	/// Approval stake of the candidate. Merely the sum of all the voter's stake who approve this
+	/// candidate.
 	approval_stake: ExtendedBalance,
-	/// The final stake of this candidate.
+	/// The final stake of this candidate. Will be equal to a subset of approval stake.
 	backed_stake: ExtendedBalance,
-	/// Flag for being elected.
+	/// True if this candidate is already elected in the current election.
 	elected: bool,
 	/// The round index at which this candidate was elected.
 	round: usize,
+}
+
+/// A vote being casted by a [`Voter`] to a [`Candidate`] is an `Edge`.
+#[derive(Clone, Default, Debug)]
+pub struct Edge<AccountId> {
+	/// Identifier of the edge candidate.
+	///
+	/// Equal to `self.candidate.borrow().who`.
+	// TODO: this is redundant; remove it and use candidate.who.
+	who: AccountId,
+	/// Load of this edge.
+	load: Rational128,
+	/// Pointer to the candidate.
+	candidate: CandidatePtr<AccountId>,
+	/// The weight (i.e. stake given to `who`) of this edge.
+	weight: ExtendedBalance,
 }
 
 /// A voter entity.
@@ -142,11 +155,11 @@ pub struct Candidate<AccountId> {
 pub struct Voter<AccountId> {
 	/// Identifier.
 	who: AccountId,
-	/// List of candidates proposed by this voter.
+	/// List of candidates approved by this voter.
 	edges: Vec<Edge<AccountId>>,
 	/// The stake of this voter.
 	budget: ExtendedBalance,
-	/// Incremented each time a candidate that this voter voted for has been elected.
+	/// Load of the voter.
 	load: Rational128,
 }
 
@@ -178,6 +191,11 @@ impl<AccountId: IdentifierT> Voter<AccountId> {
 	/// Try and normalize the votes of self.
 	///
 	/// If the normalization is successful then `true` is returned.
+	///
+	/// ### Errors
+	///
+	/// This will return only if the internal `normalize` fails. This can happen if the sum of the
+	/// weights exceeds `ExtendedBalance::max_value()`.
 	pub fn try_normalize(&mut self) -> Result<(), &'static str> {
 		let edge_weights = self.edges.iter().map(|e| e.weight).collect::<Vec<_>>();
 		edge_weights.normalize(self.budget).map(|normalized| {
@@ -192,21 +210,6 @@ impl<AccountId: IdentifierT> Voter<AccountId> {
 			}
 		})
 	}
-}
-
-/// A candidate being backed by a voter.
-#[derive(Clone, Default, Debug)]
-pub struct Edge<AccountId> {
-	/// Identifier.
-	// TODO: this is redundant; remove it and use candidate.who.
-	who: AccountId,
-	/// Load of this vote.
-	load: Rational128,
-	/// pointer to the candidate.
-	candidate: CandidatePtr<AccountId>,
-	/// The weight (i.e. stake given to `who`) of this edge. Only used in [`balanced_heuristic`] for
-	/// now.
-	weight: ExtendedBalance,
 }
 
 /// Final result of the election.
@@ -271,6 +274,13 @@ where
 	/// Try and normalize this assignment.
 	///
 	/// If `Ok(())` is returned, then the assignment MUST have been successfully normalized to 100%.
+	///
+	/// ### Errors
+	///
+	/// This will return only if the internal `normalize` fails. This can happen if sum of
+	/// `self.distribution.map(|p| p.deconstruct())` fails to fit inside `UpperOf<P>`. A user of
+	/// this crate may statically assert that this can never happen and safely `expect` this to
+	/// return `Ok`.
 	pub fn try_normalize(&mut self) -> Result<(), &'static str> {
 		self.distribution
 			.iter()

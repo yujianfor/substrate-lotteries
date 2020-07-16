@@ -41,7 +41,10 @@ frame-benchmarking = { version = "2.0.0-rc4", path = "../benchmarking" }
 rand_chacha = { version = "0.2" }
 parking_lot = "0.10.2"
 env_logger = "0.7.1"
+log = "0.4.8"
 hex = "0.4"
+logging_timer = "1.0.0"
+sp-state-machine = { version = "0.8.0-rc4", path = "../../primitives/state-machine", features = ["remote-ext"] }
 
 [features]
 default = ["std"]

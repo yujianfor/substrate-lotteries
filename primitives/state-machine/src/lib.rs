@@ -44,6 +44,9 @@ mod trie_backend_essence;
 mod stats;
 mod read_only;
 
+#[cfg(feature = "remote-ext")]
+pub mod remote_ext;
+
 pub use sp_trie::{trie_types::{Layout, TrieDBMut}, StorageProof, TrieMut, DBValue, MemoryDB};
 pub use testing::TestExternalities;
 pub use basic::BasicExternalities;

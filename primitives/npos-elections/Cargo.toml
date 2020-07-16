@@ -22,8 +22,6 @@ sp-arithmetic = { version = "2.0.0-rc4", default-features = false, path = "../ar
 substrate-test-utils = { version = "2.0.0-rc4", path = "../../test-utils" }
 rand = "0.7.3"
 sp-runtime = { version = "2.0.0-rc4", path = "../../primitives/runtime" }
-# remote-externalities = { git = "https://github.com/paritytech/substrate-debug-kit", branch = "master" }
-remote-externalities = { path = "../../../substrate-debug-kit/remote-externalities" }
 
 [features]
 default = ["std"]

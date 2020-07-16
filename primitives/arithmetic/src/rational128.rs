@@ -18,11 +18,17 @@
 use sp_std::{cmp::Ordering, prelude::*};
 use crate::helpers_128bit;
 use num_traits::Zero;
-use sp_debug_derive::RuntimeDebug;
 
 /// A wrapper for any rational number with a 128 bit numerator and denominator.
-#[derive(Clone, Copy, Default, Eq, RuntimeDebug)]
+#[derive(Clone, Copy, Default, Eq)]
 pub struct Rational128(u128, u128);
+
+#[cfg(feature = "std")]
+impl sp_std::fmt::Debug for Rational128 {
+	fn fmt(&self, f: &mut sp_std::fmt::Formatter<'_>) -> sp_std::fmt::Result {
+		write!(f, "Rational128({:.4})", self.0 as f32 / self.1 as f32)
+	}
+}
 
 impl Rational128 {
 	/// Nothing.

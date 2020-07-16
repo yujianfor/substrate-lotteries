@@ -43,7 +43,7 @@ pub fn balanced_heuristic<AccountId: IdentifierT, P: PerThing>(
 		round_winner.borrow_mut().elected = true;
 		winners.push(round_winner);
 
-		balance(&mut voters, 10, 0);
+		balance(&mut voters, 2, 0);
 	}
 
 	let mut assignments = voters.into_iter().filter_map(|v| v.into_assignment()).collect::<Vec<_>>();
@@ -65,6 +65,13 @@ pub(crate) fn calculate_max_score<AccountId: IdentifierT, P: PerThing>(
 	candidates: &[CandidatePtr<AccountId>],
 	voters: &[Voter<AccountId>],
 ) -> CandidatePtr<AccountId> where ExtendedBalance: From<InnerOf<P>> {
+	for c_ptr in candidates.iter() {
+		let mut candidate = c_ptr.borrow_mut();
+		if !candidate.elected {
+			candidate.score = Rational128::from(1, P::ACCURACY.into());
+		}
+	}
+
 	// TODO: impl of compare for Rational128 need to be sound and fuzzed.
 	for voter in voters.iter() {
 		let mut denominator_contribution: ExtendedBalance = 0;
@@ -85,13 +92,9 @@ pub(crate) fn calculate_max_score<AccountId: IdentifierT, P: PerThing>(
 		for edge in voter.edges.iter() {
 			let mut edge_candidate = edge.candidate.borrow_mut();
 			if !edge_candidate.elected {
-				// initial value of all scores is 1.0. And, this value which is parts-per-P is
-				// technically the denominator, hence we put `P::ACCURACY` parts into the numerator
-				// to compensate.
-				let one: ExtendedBalance = P::ACCURACY.into();
-				// note that since we have an assignment here (not `+=`) we skipped an initial loop
-				// to initialize all the scores, compared to the reference implementation.
-				edge_candidate.score = Rational128::from(P::ACCURACY.into(), denominator_contribution + one);
+				// TODO: make a fn for this. Something like accumulate numerator or add denominator.s
+				let prev_d = edge_candidate.score.d();
+				edge_candidate.score = Rational128::from(1, denominator_contribution + prev_d);
 			}
 		}
 	}
@@ -101,14 +104,19 @@ pub(crate) fn calculate_max_score<AccountId: IdentifierT, P: PerThing>(
 	let mut best_candidate = Rc::clone(&candidates[0]);
 	for c_ptr in candidates.iter() {
 		let mut candidate = c_ptr.borrow_mut();
-		if candidate.approval_stake > 0 && !candidate.elected {
+		if candidate.approval_stake > 0  {
 			// finalise the score value.
 			let score_d = candidate.score.d();
-			let score_n = candidate.approval_stake * candidate.score.n();
+			let one: ExtendedBalance = P::ACCURACY.into();
+			let score_n = candidate.approval_stake.checked_mul(one).unwrap_or_else(|| {
+				println!("Failed to mul {:?} and {:?}", candidate.approval_stake, one);
+				panic!();
+				sp_arithmetic::traits::Bounded::max_value()
+			});
 			candidate.score = Rational128::from(score_n, score_d);
 
 			// check if we have a new winner.
-			if candidate.score > best_score {
+			if !candidate.elected && candidate.score > best_score {
 				best_score = candidate.score;
 				best_candidate = Rc::clone(&c_ptr);
 			}
@@ -329,7 +337,26 @@ mod tests {
 	}
 
 	#[test]
-	fn test_latest_kusama_head() {
+	fn linear_voting_example_works() {
+		let _ = env_logger::try_init();
+		let candidates = vec![11, 21, 31, 41, 51, 61, 71];
+		let voters = vec![
+			(2, 2000, vec![11]),
+			(4, 1000, vec![11, 21]),
+			(6, 1000, vec![21, 31]),
+			(8, 1000, vec![31, 41]),
+			(110, 1000, vec![41, 51]),
+			(120, 1000, vec![51, 61]),
+			(130, 1000, vec![61, 71]),
+		];
+
+		let ElectionResult { winners, assignments: _ } = balanced_heuristic::<_, Perbill>(4, candidates, voters).unwrap();
+		assert_eq!(winners, vec![
+			(11, 3000),
+			(31, 2000),
+			(51, 1500),
+			(61, 1500),
+		]);
 
 	}
 }

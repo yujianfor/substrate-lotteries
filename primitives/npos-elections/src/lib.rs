@@ -135,7 +135,7 @@ pub struct Candidate<AccountId> {
 }
 
 /// A vote being casted by a [`Voter`] to a [`Candidate`] is an `Edge`.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 pub struct Edge<AccountId> {
 	/// Identifier of the edge candidate.
 	///
@@ -150,8 +150,15 @@ pub struct Edge<AccountId> {
 	weight: ExtendedBalance,
 }
 
+#[cfg(feature = "std")]
+impl<A: sp_std::fmt::Debug> sp_std::fmt::Debug for Edge<A> {
+	fn fmt(&self, f: &mut sp_std::fmt::Formatter<'_>) -> sp_std::fmt::Result {
+		write!(f, "Edge({:?}, weight = {:?})", self.who, self.weight)
+	}
+}
+
 /// A voter entity.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 pub struct Voter<AccountId> {
 	/// Identifier.
 	who: AccountId,
@@ -161,6 +168,13 @@ pub struct Voter<AccountId> {
 	budget: ExtendedBalance,
 	/// Load of the voter.
 	load: Rational128,
+}
+
+#[cfg(feature = "std")]
+impl<A: sp_std::fmt::Debug> std::fmt::Debug for Voter<A> {
+	fn fmt(&self, f: &mut sp_std::fmt::Formatter<'_>) -> sp_std::fmt::Result {
+		write!(f, "Voter({:?}, budget = {}, edges = {:?})", self.who, self.budget, self.edges)
+	}
 }
 
 impl<AccountId: IdentifierT> Voter<AccountId> {

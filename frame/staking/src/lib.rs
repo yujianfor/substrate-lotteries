@@ -271,6 +271,8 @@
 mod mock;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod remote_test;
 #[cfg(any(feature = "runtime-benchmarks", test))]
 pub mod testing_utils;
 #[cfg(any(feature = "runtime-benchmarks", test))]
@@ -3002,7 +3004,7 @@ impl<T: Trait> Module<T> {
 	/// Self votes are added and nominations before the most recent slashing span are reaped.
 	///
 	/// No storage item is updated.
-	fn do_phragmen<Accuracy: PerThing>(
+	pub fn do_phragmen<Accuracy: PerThing>(
 		iterations: usize,
 	) -> Option<PrimitiveElectionResult<T::AccountId, Accuracy>>
 		where ExtendedBalance: From<InnerOf<Accuracy>>

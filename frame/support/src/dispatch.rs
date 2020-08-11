@@ -2480,6 +2480,7 @@ mod tests {
 		},
 	];
 
+	#[derive(scale_info::TypeInfo)]
 	pub struct TraitImpl {}
 
 	impl Trait for TraitImpl {

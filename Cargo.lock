@@ -1702,6 +1702,7 @@ dependencies = [
  "frame-support",
  "impl-trait-for-tuples",
  "parity-scale-codec",
+ "scale-info",
  "serde",
  "sp-core",
  "sp-externalities",
@@ -7188,8 +7189,8 @@ name = "scale-info-derive"
 version = "0.2.0"
 dependencies = [
  "proc-macro2",
- "quote 1.0.6",
- "syn 1.0.33",
+ "quote",
+ "syn",
 ]
 
 [[package]]

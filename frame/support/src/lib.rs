@@ -40,6 +40,8 @@ pub use codec;
 pub use once_cell;
 #[doc(hidden)]
 pub use paste;
+#[doc(hidden)]
+pub use scale_info;
 #[cfg(feature = "std")]
 #[doc(hidden)]
 pub use sp_state_machine::BasicExternalities;
@@ -854,9 +856,9 @@ pub mod pallet_prelude {
 /// pub mod pallet {
 /// 	use frame_support::pallet_prelude::*; // Import various types used in pallet definition
 /// 	use frame_system::pallet_prelude::*; // OriginFor helper type for implementing dispatchables.
-/// 
+///
 /// 	type BalanceOf<T> = <T as Trait>::Balance;
-/// 
+///
 /// 	// Define the generic parameter of the pallet
 /// 	// The macro checks trait generics: is expected none or `I: Instance = DefaultInstance`.
 /// 	// The macro parses `#[pallet::const_]` attributes: used to generate constant metadata,
@@ -867,12 +869,12 @@ pub mod pallet_prelude {
 /// 		type MyGetParam: Get<u32>;
 /// 		type Balance: Parameter + Default;
 /// 	}
-/// 
+///
 /// 	// Define the module struct placeholder, various pallet function are implemented on it.
 /// 	// The macro checks struct generics: is expected `T` or `T, I = DefaultInstance`
 /// 	#[pallet::module]
 /// 	pub struct Module<T>(PhantomData<T>);
-/// 
+///
 /// 	// Implement on the module interface on module.
 /// 	// The macro checks:
 /// 	// * trait is `ModuleInterface` (imported from pallet_prelude)
@@ -880,7 +882,7 @@ pub mod pallet_prelude {
 /// 	#[pallet::module_interface]
 /// 	impl<T: Trait> ModuleInterface<BlockNumberFor<T>> for Module<T> {
 /// 	}
-/// 
+///
 /// 	// Declare Call struct and implement dispatchables.
 /// 	//
 /// 	// WARNING: Each parameter used in functions must implement: Clone, Debug, Eq, PartialEq,
@@ -907,7 +909,7 @@ pub mod pallet_prelude {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	// Declare pallet Error enum. (this is optional)
 /// 	// The macro checks enum generics and that each variant is unit.
 /// 	// The macro generate error metadata using doc comment on each variant.
@@ -916,7 +918,7 @@ pub mod pallet_prelude {
 /// 		/// doc comment put into metadata
 /// 		InsufficientProposersBalance,
 /// 	}
-/// 
+///
 /// 	// Declare pallet Event enum. (this is optional)
 /// 	//
 /// 	// WARNING: Each type used in variants must implement: Clone, Debug, Eq, PartialEq, Codec.
@@ -936,7 +938,7 @@ pub mod pallet_prelude {
 /// 		// here metadata will be `Other` as define in metadata list
 /// 		Something(u32),
 /// 	}
-/// 
+///
 /// 	// Declare a storage, any amount of storage can be declared.
 /// 	//
 /// 	// Is expected either `StorageValueType`, `StorageMapType` or `StorageDoubleMapType`.
@@ -952,11 +954,11 @@ pub mod pallet_prelude {
 /// 	// implements metadata. Thus generic storage hasher is supported.
 /// 	#[pallet::storage] #[allow(type_alias_bounds)]
 /// 	type MyStorageValue<T: Trait> = StorageValueType<MyStorageValueP, T::Balance, ValueQuery>;
-/// 
+///
 /// 	// Another declaration
 /// 	#[pallet::storage]
 /// 	type MyStorage = StorageMapType<MyStorageP, Blake2_128Concat, u32, u32>;
-/// 
+///
 /// 	// Declare genesis config. (This is optional)
 /// 	//
 /// 	// The macro accept either type alias or struct or enum, it checks generics are consistent.
@@ -967,19 +969,19 @@ pub mod pallet_prelude {
 /// 	pub struct GenesisConfig {
 /// 		_myfield: u32,
 /// 	}
-/// 
+///
 /// 	// Declare genesis builder. (This is need only if GenesisConfig is declared)
 /// 	#[pallet::genesis_build]
 /// 	impl<T: Trait> GenesisBuilder<T> for GenesisConfig {
 /// 		fn build(&self) {}
 /// 	}
-/// 
+///
 /// 	// Declare a pallet origin. (this is optional)
 /// 	//
 /// 	// The macro accept type alias or struct or enum, it checks generics are consistent.
 /// 	#[pallet::origin]
 /// 	pub struct Origin<T>(PhantomData<T>);
-/// 
+///
 /// 	// Declare inherent provider for module. (this is optional)
 /// 	//
 /// 	// The macro checks module is `Module<T>` or `Module<T, I>` and trait is `ProvideInherent`
@@ -987,27 +989,27 @@ pub mod pallet_prelude {
 /// 	impl<T: Trait> ProvideInherent for Module<T> {
 /// 		type Call = Call<T>;
 /// 		type Error = InherentError;
-/// 
+///
 /// 		const INHERENT_IDENTIFIER: InherentIdentifier = INHERENT_IDENTIFIER;
-/// 
+///
 /// 		fn create_inherent(_data: &InherentData) -> Option<Self::Call> {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	// Regular rust code needed for implementing ProvideInherent trait
-/// 
+///
 /// 	#[derive(codec::Encode, sp_runtime::RuntimeDebug)]
 /// 	#[cfg_attr(feature = "std", derive(codec::Decode))]
 /// 	pub enum InherentError {
 /// 	}
-/// 
+///
 /// 	impl sp_inherents::IsFatalError for InherentError {
 /// 		fn is_fatal_error(&self) -> bool {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	pub const INHERENT_IDENTIFIER: sp_inherents::InherentIdentifier = *b"testpall";
 /// }
 /// ```
@@ -1019,23 +1021,23 @@ pub mod pallet_prelude {
 /// pub mod pallet {
 /// 	use frame_support::pallet_prelude::*;
 /// 	use frame_system::pallet_prelude::*;
-/// 
+///
 /// 	type BalanceOf<T, I = DefaultInstance> = <T as Trait<I>>::Balance;
-/// 
+///
 /// 	#[pallet::trait_]
 /// 	pub trait Trait<I: Instance = DefaultInstance>: frame_system::Trait {
 /// 		#[pallet::const_]
 /// 		type MyGetParam: Get<u32>;
 /// 		type Balance: Parameter + Default;
 /// 	}
-/// 
+///
 /// 	#[pallet::module]
 /// 	pub struct Module<T, I = DefaultInstance>(PhantomData<(T, I)>);
-/// 
+///
 /// 	#[pallet::module_interface]
 /// 	impl<T: Trait<I>, I: Instance> ModuleInterface<BlockNumberFor<T>> for Module<T, I> {
 /// 	}
-/// 
+///
 /// 	#[pallet::call]
 /// 	impl<T: Trait<I>, I: Instance> Call for Module<T, I> {
 /// 		/// Doc comment put in metadata
@@ -1045,13 +1047,13 @@ pub mod pallet_prelude {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	#[pallet::error]
 /// 	pub enum Error<T, I = DefaultInstance> {
 /// 		/// doc comment put into metadata
 /// 		InsufficientProposersBalance,
 /// 	}
-/// 
+///
 /// 	#[pallet::event]
 /// 	#[pallet::metadata(BalanceOf<T> = Balance, u32 = Other)]
 /// 	pub enum Event<T: Trait<I>, I: Instance = DefaultInstance> {
@@ -1061,54 +1063,54 @@ pub mod pallet_prelude {
 /// 		Spending(BalanceOf<T, I>),
 /// 		Something(u32),
 /// 	}
-/// 
+///
 /// 	#[pallet::storage] #[allow(type_alias_bounds)]
 /// 	type MyStorageValue<T: Trait<I>, I: Instance = DefaultInstance> =
 /// 		StorageValueType<MyStorageValueP<I>, T::Balance, ValueQuery>;
-/// 
+///
 /// 	#[pallet::storage]
 /// 	type MyStorage<I = DefaultInstance> =
 /// 		StorageMapType<MyStorageP<I>, Blake2_128Concat, u32, u32>;
-/// 
+///
 /// 	#[pallet::genesis_config]
 /// 	#[derive(Default)]
 /// 	pub struct GenesisConfig {
 /// 		_myfield: u32,
 /// 	}
-/// 
+///
 /// 	#[pallet::genesis_build]
 /// 	impl<T: Trait<I>, I: Instance> GenesisBuilder<T, I> for GenesisConfig {
 /// 		fn build(&self) {}
 /// 	}
-/// 
+///
 /// 	#[pallet::origin]
 /// 	pub struct Origin<T, I = DefaultInstance>(PhantomData<(T, I)>);
-/// 
+///
 /// 	#[pallet::inherent]
 /// 	impl<T: Trait<I>, I: Instance> ProvideInherent for Module<T, I> {
 /// 		type Call = Call<T, I>;
 /// 		type Error = InherentError;
-/// 
+///
 /// 		const INHERENT_IDENTIFIER: InherentIdentifier = INHERENT_IDENTIFIER;
-/// 
+///
 /// 		fn create_inherent(_data: &InherentData) -> Option<Self::Call> {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	// Regular rust code needed for implementing ProvideInherent trait
-/// 
+///
 /// 	#[derive(codec::Encode, sp_runtime::RuntimeDebug)]
 /// 	#[cfg_attr(feature = "std", derive(codec::Decode))]
 /// 	pub enum InherentError {
 /// 	}
-/// 
+///
 /// 	impl sp_inherents::IsFatalError for InherentError {
 /// 		fn is_fatal_error(&self) -> bool {
 /// 			unimplemented!();
 /// 		}
 /// 	}
-/// 
+///
 /// 	pub const INHERENT_IDENTIFIER: sp_inherents::InherentIdentifier = *b"testpall";
 /// }
 /// ```

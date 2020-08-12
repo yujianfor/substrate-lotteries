@@ -1582,7 +1582,7 @@ macro_rules! decl_module {
 		/// Dispatchable calls.
 		///
 		/// Each variant of this enum maps to a dispatchable function from the associated module.
-		#[derive($crate::codec::Encode, $crate::codec::Decode, $crate::scale_info::TypeInfo)]
+		#[derive($crate::codec::Encode, $crate::codec::Decode)]
 		pub enum $call_type<$trait_instance: $trait_name$(<I>, $instance: $instantiable $( = $module_default_instance)?)?>
 			where $( $other_where_bounds )*
 		{
@@ -1908,7 +1908,6 @@ macro_rules! impl_outer_dispatch {
 			Clone, PartialEq, Eq,
 			$crate::codec::Encode,
 			$crate::codec::Decode,
-			$crate::scale_info::TypeInfo,
 			$crate::RuntimeDebug,
 		)]
 		pub enum $call_type {
@@ -2480,7 +2479,6 @@ mod tests {
 		},
 	];
 
-	#[derive(scale_info::TypeInfo)]
 	pub struct TraitImpl {}
 
 	impl Trait for TraitImpl {

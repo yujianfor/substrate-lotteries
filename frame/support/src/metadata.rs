@@ -250,7 +250,10 @@ mod tests {
 	use codec::{Encode, Decode};
 	use crate::traits::Get;
 	use scale_info::{Registry, IntoCompact};
-	use sp_runtime::transaction_validity::TransactionValidityError;
+	use sp_runtime::{
+		traits::Member,
+		transaction_validity::TransactionValidityError
+	};
 	use sp_std::marker::PhantomData;
 	use scale_info::form::CompactForm;
 
@@ -345,11 +348,12 @@ mod tests {
 	#[frame_support::pallet(EventModule)]
 	mod event_module {
 		use frame_support::pallet_prelude::*;
+		use super::*;
 		use super::frame_system::{self, BlockNumberFor, OriginFor};
 
 		#[pallet::trait_]
 		pub trait Trait: frame_system::Trait {
-			type Balance: PartialEq + Eq + sp_std::fmt::Debug;
+			type Balance: Member;
 		}
 
 		type BalanceOf<T> = <T as Trait>::Balance;
@@ -392,12 +396,13 @@ mod tests {
 	#[frame_support::pallet(EventModule2)]
 	mod event_module2 {
 		use frame_support::pallet_prelude::*;
+		use super::*;
 		use super::frame_system::{self, BlockNumberFor, OriginFor};
 
 		#[pallet::trait_]
 		pub trait Trait: frame_system::Trait {
 			type Origin;
-			type Balance;
+			type Balance: Member;
 			type BlockNumber;
 		}
 
@@ -414,11 +419,10 @@ mod tests {
 		type BalanceOf<T> = <T as Trait>::Balance;
 
 		#[pallet::event]
-		pub enum Event<T> {}
-		// #[pallet::metadata(BalanceOf<T> = Balance)]
-		// pub enum Event<T: Trait> {
-		// 	TestEvent(BalanceOf<T>),
-		// }
+		#[pallet::metadata(BalanceOf<T> = Balance)]
+		pub enum Event<T: Trait> {
+			TestEvent(BalanceOf<T>),
+		}
 
 		#[pallet::storage] #[allow(type_alias_bounds)]
 		type TestStorage = StorageValueType<TestStorageP, Option<u32>, ValueQuery>;

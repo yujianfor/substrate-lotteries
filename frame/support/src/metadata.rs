@@ -145,7 +145,7 @@ macro_rules! __runtime_modules_to_metadata_calls_call {
 		with Call
 		$(with $kws:ident)*
 	) => {
-		Some($mod::$module::<$runtime $(, $mod::$instance )?>::call_functions2())
+		Some($mod::$module::<$runtime $(, $mod::$instance )?>::call_functions())
 	};
 	(
 		$mod: ident,
@@ -355,7 +355,10 @@ mod tests {
 
 		#[pallet::trait_]
 		pub trait Trait: frame_system::Trait {
-			type Balance: Member;
+			type Balance: Member
+				+ codec::Codec
+				+ scale_info::TypeInfo // todo: [AJ] only for std, and embed encoded on build?
+				+ codec::HasCompact; // todo: [AJ] can we remove this?
 		}
 
 		type BalanceOf<T> = <T as Trait>::Balance;
@@ -377,8 +380,9 @@ mod tests {
 		impl<T: Trait> Call for Module<T> {
 			/// Doc comment put in metadata
 			#[pallet::weight = 0] // Defines weight for call (function parameters are in scope)
-			fn aux_0(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			fn aux_0(origin: OriginFor<T>, #[pallet::compact] balance: T::Balance) -> DispatchResultWithPostInfo {
 				let _ = origin;
+				let _ = balance;
 				unreachable!();
 			}
 		}
@@ -559,7 +563,13 @@ mod tests {
 					calls: Some(vec![
 						vnext::FunctionMetadata {
 								name: "aux_0",
-								arguments: Vec::new(),
+								arguments: vec! [
+									vnext::FunctionArgumentMetadata {
+										name: "balance",
+										ty: scale_info::meta_type::<<TestRuntime as event_module::Trait>::Balance>(),
+										is_compact: true,
+									}
+								],
 								documentation: vec![" Doc comment put in metadata"],
 							}]),
 					// event: Some(DecodeDifferent::Encode(

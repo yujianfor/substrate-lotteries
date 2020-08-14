@@ -74,6 +74,12 @@ pub fn expand_call(def: &mut Def) -> proc_macro2::TokenStream {
 			.collect::<Vec<_>>()
 	});
 
+	let args_is_compact = def.call.methods.iter().map(|method| {
+		method.args.iter()
+			.map(|(is_compact, _, _)| is_compact)
+			.collect::<Vec<_>>()
+	});
+
 	quote::quote_spanned!(call_item_span =>
 		#[cfg_attr(feature = "std", derive(#scrate::DebugNoBound))]
 		#[cfg_attr(not(feature = "std"), derive(#scrate::DebugStripped))]
@@ -189,6 +195,23 @@ pub fn expand_call(def: &mut Def) -> proc_macro2::TokenStream {
 						documentation: #scrate::dispatch::DecodeDifferent::Encode(
 							&[ #( #fn_doc ),* ]
 						),
+					},
+				)* ]
+			}
+
+			#[doc(hidden)]
+			pub fn call_functions2() -> Vec<#scrate::metadata::vnext::FunctionMetadata> {
+				vec![ #(
+					#scrate::metadata::vnext::FunctionMetadata {
+						name: stringify!(#fn_),
+						arguments: vec![ #(
+							#scrate::metadata::vnext::FunctionArgumentMetadata {
+								name: stringify!(#args_name),
+								ty: ::scale_info::meta_type::<#args_type>(),
+								is_compact: #args_is_compact,
+							},
+						)* ],
+						documentation: vec![[ #( #fn_doc ),* ]],
 					},
 				)* ]
 			}

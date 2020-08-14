@@ -560,7 +560,7 @@ mod tests {
 						vnext::FunctionMetadata {
 								name: "aux_0",
 								arguments: Vec::new(),
-								documentation: Vec::new(),
+								documentation: vec![" Doc comment put in metadata"],
 							}]),
 					// event: Some(DecodeDifferent::Encode(
 					// 	FnEncode(||&[
@@ -610,7 +610,7 @@ mod tests {
 					// 		)
 					// 	}),
 					// )),
-					calls: None,
+					calls: Some(vec![]),
 					// event: Some(DecodeDifferent::Encode(
 					// 	FnEncode(||&[
 					// 		EventMetadata {

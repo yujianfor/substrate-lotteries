@@ -292,6 +292,7 @@ mod tests {
 	#[frame_support::pallet(System)]
 	mod frame_system {
 		use super::*;
+		use super::frame_system;
 		use frame_support::pallet_prelude::*;
 
 		#[pallet::trait_]
@@ -307,14 +308,19 @@ mod tests {
 			type Call;
 		}
 
-		pub type OriginFor<T> = <T as Trait>::Origin;
-		pub type BlockNumberFor<T> = <T as Trait>::BlockNumber;
+		pub mod pallet_prelude {
+			pub type OriginFor<T> = <T as super::Trait>::Origin;
+			pub type BlockNumberFor<T> = <T as super::Trait>::BlockNumber;
+		}
+
+		// pub type OriginFor<T> = <T as Trait>::Origin;
+		// pub type BlockNumberFor<T> = <T as Trait>::BlockNumber;
 
 		#[pallet::module]
 		pub struct Module<T>(PhantomData<T>);
 
 		#[pallet::module_interface]
-		impl<T: Trait> ModuleInterface<BlockNumberFor<T>> for Module<T> {
+		impl<T: Trait> ModuleInterface<pallet_prelude::BlockNumberFor<T>> for Module<T> {
 		}
 
 		#[pallet::call]
@@ -347,8 +353,9 @@ mod tests {
 	#[frame_support::pallet(EventModule)]
 	mod event_module {
 		use frame_support::pallet_prelude::*;
+		use super::frame_system::pallet_prelude::*;
 		use super::*;
-		use super::frame_system::{self, BlockNumberFor, OriginFor};
+		use super::frame_system;
 
 		#[pallet::trait_]
 		pub trait Trait: frame_system::Trait {
@@ -398,8 +405,9 @@ mod tests {
 	#[frame_support::pallet(EventModule2)]
 	mod event_module2 {
 		use frame_support::pallet_prelude::*;
+		use super::frame_system::pallet_prelude::*;
 		use super::*;
-		use super::frame_system::{self, BlockNumberFor, OriginFor};
+		use super::frame_system;
 
 		#[pallet::trait_]
 		pub trait Trait: frame_system::Trait {
@@ -421,7 +429,7 @@ mod tests {
 		type BalanceOf<T> = <T as Trait>::Balance;
 
 		#[pallet::event]
-		#[pallet::metadata(BalanceOf<T> = Balance)]
+		// #[pallet::metadata(BalanceOf<T> = Balance)]
 		pub enum Event<T: Trait> {
 			TestEvent(BalanceOf<T>),
 		}
@@ -481,7 +489,7 @@ mod tests {
 
 	impl_runtime_metadata!(
 		for TestRuntime with modules where Extrinsic = TestExtrinsic
-			system::Module as System with Event,
+			frame_system::Module as System with Event,
 			event_module::Module as Module with Event Call,
 			event_module2::Module as Module2 with Event Storage Call,
 	);

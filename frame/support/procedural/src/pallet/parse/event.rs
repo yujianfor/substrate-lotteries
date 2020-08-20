@@ -31,7 +31,7 @@ pub struct EventDef {
 	/// The keyword Event used (contains span).
 	pub event: keyword::Event,
 	/// Event metadatas: `(name, args, docs)`.
-	pub metadata: Vec<(syn::Ident, Vec<syn::Ident>, Vec<syn::Lit>)>,
+	pub metadata: Vec<(syn::Ident, Vec<(syn::Type, Vec<syn::Ident>)>, Vec<syn::Lit>)>, // todo: [AJ] could introduce type here
 	/// A set of usage of instance, must be check for consistency with trait.
 	pub instances: Vec<helper::InstanceUsage>,
 	/// If event is declared with instance.
@@ -158,10 +158,14 @@ impl EventDef {
 				let args = variant.fields.iter()
 					.map(|field| {
 						metadata.iter().find(|m| m.0 == field.ty)
-							.map(|m| m.1.clone())
+							.map(|m| (m.0.clone(), vec![m.1.clone()]))
 							.or_else(|| {
 								if let syn::Type::Path(p) = &field.ty {
-									p.path.segments.last().map(|s| s.ident.clone())
+									let segs = p.path.segments
+										.iter()
+										.map(|s| s.ident.clone())
+										.collect::<Vec<_>>();
+									Some((field.ty.clone(), segs))
 								} else {
 									None
 								}

@@ -149,30 +149,31 @@ impl TraitDef {
 			}
 		}
 
-		let has_frame_system_supertrait = item.supertraits.iter().any(|s| {
-			syn::parse2::<FrameSystemTraitParse>(s.to_token_stream()).is_ok()
-		});
-
-		if !has_frame_system_supertrait {
-			let found = if item.supertraits.is_empty() {
-				"none".to_string()
-			} else {
-				let mut found = item.supertraits.iter()
-					.fold(String::new(), |acc, s| {
-						format!("{}`{}`, ", acc, quote::quote!(#s).to_string())
-					});
-				found.pop();
-				found.pop();
-				found
-			};
-
-			let msg = format!(
-				"Invalid pallet::trait, expect explicit `frame_system::Trait` as supertrait, \
-				found {}.",
-				found
-			);
-			return Err(syn::Error::new(item.span(), msg));
-		}
+		// todo: [AJ] restore this check
+		// let has_frame_system_supertrait = item.supertraits.iter().any(|s| {
+		// 	syn::parse2::<FrameSystemTraitParse>(s.to_token_stream()).is_ok()
+		// });
+		//
+		// if !has_frame_system_supertrait {
+		// 	let found = if item.supertraits.is_empty() {
+		// 		"none".to_string()
+		// 	} else {
+		// 		let mut found = item.supertraits.iter()
+		// 			.fold(String::new(), |acc, s| {
+		// 				format!("{}`{}`, ", acc, quote::quote!(#s).to_string())
+		// 			});
+		// 		found.pop();
+		// 		found.pop();
+		// 		found
+		// 	};
+		//
+		// 	let msg = format!(
+		// 		"Invalid pallet::trait, expect explicit `frame_system::Trait` as supertrait, \
+		// 		found {}.",
+		// 		found
+		// 	);
+		// 	return Err(syn::Error::new(item.span(), msg));
+		// }
 
 		Ok(Self { index, has_instance, consts_metadata })
 	}

@@ -15,6 +15,8 @@ pub use sc_rpc_api::DenyUnsafe;
 use sp_transaction_pool::TransactionPool;
 use sc_finality_manual::rpc::{ManualFinalityApi, ManualFinality};
 use sc_finality_manual::FinalizeBlockCommand;
+use sc_consensus_manual_seal::rpc::{ManualSealApi, ManualSeal};
+use sc_consensus_manual_seal::CreateBlockCommand;
 
 
 /// Full client dependencies.
@@ -25,6 +27,8 @@ pub struct FullDeps<C, P> {
 	pub pool: Arc<P>,
 	/// The command stream for the manual finality gadget
 	pub finality_sink: Sender<FinalizeBlockCommand<Hash>>,
+	/// The command stream for the manual consensus engine
+	pub authorship_sink: Sender<CreateBlockCommand<Hash>>,
 	/// Whether to deny unsafe calls
 	pub deny_unsafe: DenyUnsafe,
 }
@@ -49,6 +53,7 @@ pub fn create_full<C, P>(
 		client,
 		pool,
 		finality_sink,
+		authorship_sink,
 		deny_unsafe,
 	} = deps;
 
@@ -65,7 +70,13 @@ pub fn create_full<C, P>(
 	// to call into the runtime.
 	// `io.extend_with(YourRpcTrait::to_delegate(YourRpcStruct::new(ReferenceToClient, ...)));`
 
-	io.extend_with(ManualFinalityApi::to_delegate(ManualFinality::new(finality_sink)));
+	io.extend_with(
+		ManualFinalityApi::to_delegate(ManualFinality::new(finality_sink))
+	);
+
+	io.extend_with(
+		ManualSealApi::to_delegate(ManualSeal::new(authorship_sink))
+	);
 
 	io
 }

@@ -266,6 +266,10 @@ impl<G, E> ChainSpec<G, E> {
 	fn set_light_sync_state(&mut self, light_sync_state: SerializableLightSyncState) {
 		self.client_spec.light_sync_state = Some(light_sync_state);	
 	}
+
+	fn get_light_sync_state(&self) -> Option<&SerializableLightSyncState> {
+		self.client_spec.light_sync_state.as_ref()
+	}
 }
 
 impl<G, E: serde::de::DeserializeOwned> ChainSpec<G, E> {
@@ -394,6 +398,10 @@ where
 
 	fn set_light_sync_state(&mut self, light_sync_state: SerializableLightSyncState) {
 		ChainSpec::set_light_sync_state(self, light_sync_state)
+	}
+
+	fn get_light_sync_state(&self) -> Option<&SerializableLightSyncState> {
+		ChainSpec::get_light_sync_state(self)
 	}
 }
 

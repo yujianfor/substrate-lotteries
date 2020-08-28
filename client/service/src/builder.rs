@@ -31,7 +31,7 @@ use sp_utils::mpsc::{tracing_unbounded, TracingUnboundedSender};
 use sc_chain_spec::get_extension;
 use sp_consensus::{
 	block_validation::{BlockAnnounceValidator, DefaultBlockAnnounceValidator, Chain},
-	import_queue::ImportQueue,
+	import_queue::ImportQueue, BlockImport,
 };
 use futures::{FutureExt, StreamExt, future::ready, channel::oneshot};
 use jsonrpc_pubsub::manager::SubscriptionManager;
@@ -270,6 +270,11 @@ pub fn new_light_parts<TBl, TRtApi, TExecDisp>(
 ) -> Result<TLightParts<TBl, TRtApi, TExecDisp>, Error> where
 	TBl: BlockT,
 	TExecDisp: NativeExecutionDispatch + 'static,
+	TRtApi: sp_api::ConstructRuntimeApi<TBl, TLightClient<TBl, TRtApi, TExecDisp>>,
+	<TRtApi as sp_api::ConstructRuntimeApi<TBl, TLightClient<TBl, TRtApi, TExecDisp>>>::RuntimeApi:
+		sp_api::Core<TBl> +
+		sp_api::ApiErrorExt<Error = sp_blockchain::Error> +
+		sp_api::ApiExt<TBl, StateBackend = <TLightBackend<TBl> as sc_client_api::Backend<TBl>>::State>,
 {
 
 	let task_manager = {
@@ -311,13 +316,23 @@ pub fn new_light_parts<TBl, TRtApi, TExecDisp>(
 	);
 	let on_demand = Arc::new(sc_network::config::OnDemand::new(fetch_checker));
 	let backend = sc_light::new_light_backend(light_blockchain);
-	let client = Arc::new(light::new_light(
+	let mut client = Arc::new(light::new_light(
 		backend.clone(),
 		config.chain_spec.as_storage_builder(),
 		executor,
 		Box::new(task_manager.spawn_handle()),
 		config.prometheus_config.as_ref().map(|config| config.registry.clone()),
 	)?);
+
+	if let Some(sync_state) = config.chain_spec.get_light_sync_state() {
+		let sync_state = sc_chain_spec::LightSyncState::<TBl>::from_serializable(sync_state)
+			.map_err(|err| err.to_string())?;
+
+		let origin = sp_consensus::BlockOrigin::File;
+		let block_import_params = sp_consensus::BlockImportParams::new(origin, sync_state.header);
+		log::info!("Importing block");
+		client.import_block(block_import_params, HashMap::new())?;
+	}
 
 	Ok((client, backend, keystore, task_manager, on_demand))
 }

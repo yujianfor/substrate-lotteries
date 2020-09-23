@@ -84,6 +84,7 @@ members = [
 	"frame/identity",
 	"frame/im-online",
 	"frame/indices",
+	"frame/lotteries",
 	"frame/membership",
 	"frame/metadata",
 	"frame/multisig",

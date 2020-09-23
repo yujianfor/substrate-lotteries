@@ -400,7 +400,7 @@ fn create_project(
 	).expect("WASM build runner `Cargo.toml` writing can not fail; qed");
 
 	fs::write(
-		project_folder.join("src/main.rs"),
+		project_folder.join("src/lib.rs"),
 		format!(
 			r#"
 				use substrate_wasm_builder::build_project_with_default_rustflags;
@@ -417,7 +417,7 @@ fn create_project(
 			cargo_toml_path = replace_back_slashes(cargo_toml_path.display()),
 			default_rustflags = default_rustflags,
 		)
-	).expect("WASM build runner `main.rs` writing can not fail; qed");
+	).expect("WASM build runner `lib.rs` writing can not fail; qed");
 }
 
 fn run_project(project_folder: &Path) {
